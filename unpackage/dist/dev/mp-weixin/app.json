@@ -1,0 +1,41 @@
+{
+  "pages": [
+    "pages/index/index",
+    "pages/submit/submit",
+    "pages/profile/profile",
+    "pages/dialog/dialog"
+  ],
+  "window": {
+    "navigationBarTextStyle": "black",
+    "navigationBarTitleText": "哄一哄他（她）",
+    "navigationBarBackgroundColor": "#F8F8F8",
+    "backgroundColor": "#F8F8F8"
+  },
+  "tabBar": {
+    "color": "#7f7f7f",
+    "selectedColor": "#333333",
+    "borderStyle": "black",
+    "backgroundColor": "#ffffff",
+    "list": [
+      {
+        "pagePath": "pages/index/index",
+        "text": "挑战",
+        "iconPath": "/static/challenge.png",
+        "selectedIconPath": "/static/challenge.png"
+      },
+      {
+        "pagePath": "pages/submit/submit",
+        "text": "提交",
+        "iconPath": "/static/submit.png",
+        "selectedIconPath": "/static/submit.png"
+      },
+      {
+        "pagePath": "pages/profile/profile",
+        "text": "个人",
+        "iconPath": "/static/user.png",
+        "selectedIconPath": "/static/user.png"
+      }
+    ]
+  },
+  "usingComponents": {}
+}

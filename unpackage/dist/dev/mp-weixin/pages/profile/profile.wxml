@@ -1,0 +1,1 @@
+<view class="page"><view class="card"><view class="title">个人中心</view><view class="desc">这里将用于登录、查看战绩和个人信息。</view><button class="btn" type="primary" bindtap="{{a}}">返回挑战</button></view></view>

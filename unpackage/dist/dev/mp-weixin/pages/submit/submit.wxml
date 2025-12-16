@@ -1,0 +1,1 @@
+<view class="page"><view class="card"><view class="title">提交你的场景</view><view class="desc">填写标题、理由和分类，提交后等待审核上线。</view><button class="btn" type="primary" bindtap="{{a}}">返回挑战</button></view></view>
