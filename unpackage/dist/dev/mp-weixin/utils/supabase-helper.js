@@ -95,5 +95,187 @@ const sceneService = {
     return { data, error };
   }
 };
+const userService = {
+  /**
+   * 创建或更新用户信息
+   */
+  async createOrUpdateUser(userData) {
+    const {
+      userId,
+      nickname,
+      avatarUrl,
+      loginType = "guest",
+      wxOpenid = null
+    } = userData;
+    const { data: existingUser, error: queryError } = await config_supabase.supabase.select(
+      config_supabase.supabaseConfig.tables.users,
+      {
+        filters: [`user_id=eq.${encodeURIComponent(userId)}`],
+        select: "id"
+      }
+    );
+    if (queryError) {
+      return { data: null, error: queryError };
+    }
+    const userPayload = {
+      user_id: userId,
+      nickname: nickname || null,
+      avatar_url: avatarUrl || null,
+      login_type: loginType,
+      wx_openid: wxOpenid || null,
+      updated_at: (/* @__PURE__ */ new Date()).toISOString()
+    };
+    if (existingUser && existingUser.length > 0) {
+      const { data, error } = await config_supabase.supabase.update(
+        config_supabase.supabaseConfig.tables.users,
+        { user_id: userId },
+        userPayload
+      );
+      return { data, error };
+    } else {
+      const { data, error } = await config_supabase.supabase.insert(config_supabase.supabaseConfig.tables.users, userPayload);
+      return { data, error };
+    }
+  },
+  /**
+   * 根据 user_id 获取用户信息
+   */
+  async getUserById(userId) {
+    const { data, error } = await config_supabase.supabase.select(config_supabase.supabaseConfig.tables.users, {
+      filters: [`user_id=eq.${encodeURIComponent(userId)}`]
+    });
+    if (error)
+      return { data: null, error };
+    return { data: data && data[0] ? data[0] : null, error: null };
+  },
+  /**
+   * 根据微信 openid 获取用户信息
+   */
+  async getUserByWxOpenid(wxOpenid) {
+    const { data, error } = await config_supabase.supabase.select(config_supabase.supabaseConfig.tables.users, {
+      filters: [`wx_openid=eq.${encodeURIComponent(wxOpenid)}`]
+    });
+    if (error)
+      return { data: null, error };
+    return { data: data && data[0] ? data[0] : null, error: null };
+  }
+};
+const gameRecordService = {
+  /**
+   * 创建游戏记录
+   */
+  async createRecord(recordData) {
+    const {
+      userId,
+      sceneId,
+      isSuccess,
+      finalForgiveness,
+      interactionCount,
+      maxInteractions,
+      startForgiveness,
+      forgivenessChanges,
+      durationSeconds
+    } = recordData;
+    const { data, error } = await config_supabase.supabase.insert(config_supabase.supabaseConfig.tables.gameRecords, {
+      user_id: userId,
+      scene_id: sceneId,
+      is_success: isSuccess,
+      final_forgiveness: finalForgiveness,
+      interaction_count: interactionCount,
+      max_interactions: maxInteractions,
+      start_forgiveness: startForgiveness,
+      forgiveness_changes: JSON.stringify(forgivenessChanges),
+      duration_seconds: durationSeconds,
+      ended_at: (/* @__PURE__ */ new Date()).toISOString()
+    });
+    if (!error && sceneId) {
+      await config_supabase.supabase.update(
+        config_supabase.supabaseConfig.tables.scenes,
+        { id: sceneId },
+        { updated_at: (/* @__PURE__ */ new Date()).toISOString() }
+      );
+    }
+    return { data, error };
+  },
+  /**
+   * 获取用户的游戏记录
+   */
+  async getUserRecords(userId, options = {}) {
+    const {
+      sceneId = null,
+      limit = 50,
+      offset = 0,
+      withScene = false
+    } = options;
+    const filters = [`user_id=eq.${encodeURIComponent(userId)}`];
+    if (sceneId)
+      filters.push(`scene_id=eq.${sceneId}`);
+    const { data, error } = await config_supabase.supabase.select(config_supabase.supabaseConfig.tables.gameRecords, {
+      filters,
+      select: withScene ? "*,scene:scenes(title)" : "*",
+      query: {
+        order: "created_at.desc",
+        limit,
+        offset
+      }
+    });
+    return { data, error };
+  },
+  /**
+   * 获取用户最近挑战的唯一场景（去重后取前 N 条）
+   */
+  async getRecentScenes(userId, limit = 3) {
+    const { data, error } = await this.getUserRecords(userId, {
+      limit: limit * 5,
+      withScene: true
+    });
+    if (error || !data)
+      return { data: null, error };
+    const seen = /* @__PURE__ */ new Set();
+    const recent = [];
+    for (const rec of data) {
+      if (seen.has(rec.scene_id))
+        continue;
+      seen.add(rec.scene_id);
+      recent.push(rec);
+      if (recent.length >= limit)
+        break;
+    }
+    return { data: recent, error: null };
+  },
+  /**
+   * 获取用户的游戏统计
+   */
+  async getUserStats(userId) {
+    const { data, error } = await config_supabase.supabase.select(config_supabase.supabaseConfig.tables.gameRecords, {
+      filters: [`user_id=eq.${encodeURIComponent(userId)}`],
+      select: "is_success,scene_id"
+    });
+    if (error)
+      return { data: null, error };
+    const stats = {
+      totalGames: data.length,
+      successCount: data.filter((r) => r.is_success).length,
+      successRate: data.length > 0 ? (data.filter((r) => r.is_success).length / data.length * 100).toFixed(2) : 0,
+      uniqueScenes: new Set(data.map((r) => r.scene_id)).size
+    };
+    return { data: stats, error: null };
+  },
+  /**
+   * 获取场景的游戏记录统计
+   */
+  async getSceneRecords(sceneId, limit = 100) {
+    const { data, error } = await config_supabase.supabase.select(config_supabase.supabaseConfig.tables.gameRecords, {
+      filters: [`scene_id=eq.${sceneId}`],
+      query: {
+        order: "created_at.desc",
+        limit
+      }
+    });
+    return { data, error };
+  }
+};
+exports.gameRecordService = gameRecordService;
 exports.sceneService = sceneService;
+exports.userService = userService;
 //# sourceMappingURL=../../.sourcemap/mp-weixin/utils/supabase-helper.js.map

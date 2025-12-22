@@ -1,0 +1,9 @@
+{
+  "name": "aiChat",
+  "version": "1.0.0",
+  "description": "WeChat Cloud Function: call Kimi(Moonshot) and return reply + forgivenessDelta",
+  "main": "index.js",
+  "dependencies": {}
+}
+
+

@@ -20,6 +20,7 @@
     "ignore": [],
     "include": []
   },
-  "appid": "wx3d4dc12ec99c57aa",
-  "editorSetting": {}
+  "appid": "wxd9b2ac08a8ba76ec",
+  "editorSetting": {},
+  "cloudfunctionRoot": "cloudfunctions/"
 }

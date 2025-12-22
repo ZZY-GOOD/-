@@ -117,6 +117,84 @@ export const sceneService = {
 }
 
 /**
+ * 用户相关操作
+ */
+export const userService = {
+  /**
+   * 创建或更新用户信息
+   */
+  async createOrUpdateUser(userData) {
+    const {
+      userId,
+      nickname,
+      avatarUrl,
+      loginType = 'guest',
+      wxOpenid = null
+    } = userData
+
+    // 先查询用户是否存在
+    const { data: existingUser, error: queryError } = await supabase.select(
+      supabaseConfig.tables.users,
+      {
+        filters: [`user_id=eq.${encodeURIComponent(userId)}`],
+        select: 'id'
+      }
+    )
+
+    if (queryError) {
+      return { data: null, error: queryError }
+    }
+
+    const userPayload = {
+      user_id: userId,
+      nickname: nickname || null,
+      avatar_url: avatarUrl || null,
+      login_type: loginType,
+      wx_openid: wxOpenid || null,
+      updated_at: new Date().toISOString()
+    }
+
+    if (existingUser && existingUser.length > 0) {
+      // 更新现有用户
+      const { data, error } = await supabase.update(
+        supabaseConfig.tables.users,
+        { user_id: userId },
+        userPayload
+      )
+      return { data, error }
+    } else {
+      // 创建新用户
+      const { data, error } = await supabase.insert(supabaseConfig.tables.users, userPayload)
+      return { data, error }
+    }
+  },
+
+  /**
+   * 根据 user_id 获取用户信息
+   */
+  async getUserById(userId) {
+    const { data, error } = await supabase.select(supabaseConfig.tables.users, {
+      filters: [`user_id=eq.${encodeURIComponent(userId)}`]
+    })
+
+    if (error) return { data: null, error }
+    return { data: data && data[0] ? data[0] : null, error: null }
+  },
+
+  /**
+   * 根据微信 openid 获取用户信息
+   */
+  async getUserByWxOpenid(wxOpenid) {
+    const { data, error } = await supabase.select(supabaseConfig.tables.users, {
+      filters: [`wx_openid=eq.${encodeURIComponent(wxOpenid)}`]
+    })
+
+    if (error) return { data: null, error }
+    return { data: data && data[0] ? data[0] : null, error: null }
+  }
+}
+
+/**
  * 用户提交场景相关操作
  */
 export const userSceneService = {
@@ -200,6 +278,15 @@ export const gameRecordService = {
       ended_at: new Date().toISOString()
     })
 
+    // 更新场景的更新时间，便于最近挑战排序
+    if (!error && sceneId) {
+      await supabase.update(
+        supabaseConfig.tables.scenes,
+        { id: sceneId },
+        { updated_at: new Date().toISOString() }
+      )
+    }
+
     return { data, error }
   },
 
@@ -210,7 +297,8 @@ export const gameRecordService = {
     const {
       sceneId = null,
       limit = 50,
-      offset = 0
+      offset = 0,
+      withScene = false
     } = options
 
     const filters = [`user_id=eq.${encodeURIComponent(userId)}`]
@@ -218,6 +306,7 @@ export const gameRecordService = {
 
     const { data, error } = await supabase.select(supabaseConfig.tables.gameRecords, {
       filters,
+      select: withScene ? '*,scene:scenes(title)' : '*',
       query: {
         order: 'created_at.desc',
         limit,
@@ -226,6 +315,31 @@ export const gameRecordService = {
     })
 
     return { data, error }
+  },
+
+  /**
+   * 获取用户最近挑战的唯一场景（去重后取前 N 条）
+   */
+  async getRecentScenes(userId, limit = 3) {
+    // 先多取一些记录，防止去重后不足
+    const { data, error } = await this.getUserRecords(userId, {
+      limit: limit * 5,
+      withScene: true
+    })
+
+    if (error || !data) return { data: null, error }
+
+    const seen = new Set()
+    const recent = []
+
+    for (const rec of data) {
+      if (seen.has(rec.scene_id)) continue
+      seen.add(rec.scene_id)
+      recent.push(rec)
+      if (recent.length >= limit) break
+    }
+
+    return { data: recent, error: null }
   },
 
   /**

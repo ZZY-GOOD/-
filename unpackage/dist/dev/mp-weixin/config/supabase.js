@@ -11,6 +11,7 @@ const supabaseConfig = {
   restUrl: `${SUPABASE_URL}/rest/v1`,
   // 表名常量
   tables: {
+    users: "users",
     scenes: "scenes",
     userScenes: "user_scenes",
     gameRecords: "game_records"
@@ -73,7 +74,7 @@ class SupabaseClient {
         return { data: null, error: response.data };
       }
     } catch (error) {
-      common_vendor.index.__f__("error", "at config/supabase.js:126", "Supabase request error:", error);
+      common_vendor.index.__f__("error", "at config/supabase.js:127", "Supabase request error:", error);
       return { data: null, error: error.message };
     }
   }
@@ -114,7 +115,7 @@ class SupabaseClient {
         return { data: null, error: response.data };
       }
     } catch (error) {
-      common_vendor.index.__f__("error", "at config/supabase.js:176", "Supabase update error:", error);
+      common_vendor.index.__f__("error", "at config/supabase.js:177", "Supabase update error:", error);
       return { data: null, error: error.message };
     }
   }
@@ -139,7 +140,7 @@ class SupabaseClient {
         return { data: null, error: response.data };
       }
     } catch (error) {
-      common_vendor.index.__f__("error", "at config/supabase.js:207", "Supabase delete error:", error);
+      common_vendor.index.__f__("error", "at config/supabase.js:208", "Supabase delete error:", error);
       return { data: null, error: error.message };
     }
   }

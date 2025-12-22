@@ -1,6 +1,7 @@
 "use strict";
 Object.defineProperty(exports, Symbol.toStringTag, { value: "Module" });
 const common_vendor = require("./common/vendor.js");
+const utils_wxCloud = require("./utils/wx-cloud.js");
 if (!Math) {
   "./pages/index/index.js";
   "./pages/submit/submit.js";
@@ -9,13 +10,14 @@ if (!Math) {
 }
 const _sfc_main = {
   onLaunch: function() {
-    common_vendor.index.__f__("log", "at App.vue:4", "App Launch");
+    common_vendor.index.__f__("log", "at App.vue:7", "App Launch");
+    utils_wxCloud.initWxCloud();
   },
   onShow: function() {
-    common_vendor.index.__f__("log", "at App.vue:7", "App Show");
+    common_vendor.index.__f__("log", "at App.vue:13", "App Show");
   },
   onHide: function() {
-    common_vendor.index.__f__("log", "at App.vue:10", "App Hide");
+    common_vendor.index.__f__("log", "at App.vue:16", "App Hide");
   }
 };
 function createApp() {

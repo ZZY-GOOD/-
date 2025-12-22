@@ -51,7 +51,8 @@
 </template>
 
 <script>
-import { sceneService } from '@/utils/supabase-helper.js'
+import { sceneService, gameRecordService } from '@/utils/supabase-helper.js'
+import { generateReply } from '@/utils/ai-service.js'
 
 export default {
 	data() {
@@ -61,13 +62,18 @@ export default {
 			loading: false,
 			inputText: '',
 			forgiveness: 0,
+			startForgiveness: 0,
 			maxTurns: 10,
 			currentTurn: 0,
 			messages: [],
-			userAvatar: 'https://cdn.uviewui.com/uview/common/user.png',
-			aiAvatar: 'https://cdn.uviewui.com/uview/common/logo.png',
+			userAvatar: '/static/user.png', // 默认头像，会在 onLoad 时从本地存储读取用户头像
+			aiAvatar: '/static/user.png', // TODO: 需要添加 /static/logo.png 作为 AI 头像
 			actionLocked: false,
-			lastMsgId: ''
+			lastMsgId: '',
+			userId: '',
+			forgivenessChanges: [],
+			startTimestamp: 0,
+			recordSaved: false
 		}
 	},
 	computed: {
@@ -82,9 +88,26 @@ export default {
 			return
 		}
 		this.sceneId = options.id
+		this.loadUser()
 		this.initScene()
 	},
 	methods: {
+		loadUser() {
+			const storedAvatar = uni.getStorageSync('userAvatar')
+			if (storedAvatar) {
+				this.userAvatar = storedAvatar
+			} else {
+				this.userAvatar = '/static/user.png'
+			}
+			const storedId = uni.getStorageSync('userId')
+			this.userId = storedId || this.genAnonId()
+			if (!storedId) {
+				uni.setStorageSync('userId', this.userId)
+			}
+		},
+		genAnonId() {
+			return `guest-${Math.random().toString(16).slice(2, 10)}`
+		},
 		async initScene() {
 			this.loading = true
 			try {
@@ -95,9 +118,13 @@ export default {
 				}
 				this.scene = data
 				this.forgiveness = data.initial_forgiveness || 20
+				this.startForgiveness = this.forgiveness
 				this.maxTurns = data.max_interactions || 10
 				this.currentTurn = 0
 				this.messages = []
+				this.forgivenessChanges = []
+				this.recordSaved = false
+				this.startTimestamp = Date.now()
 				this.appendMessage('ai', data.angry_reason || data.title || '我现在很生气，你说说看。')
 			} catch (err) {
 				console.error(err)
@@ -111,7 +138,7 @@ export default {
 			this.messages.push({ id, role, text, forgivenessChange })
 			this.lastMsgId = id
 		},
-		handleSend() {
+		async handleSend() {
 			if (this.actionLocked) return
 			const content = this.inputText.trim()
 			if (!content) {
@@ -122,38 +149,56 @@ export default {
 			this.currentTurn++
 			this.appendMessage('user', content)
 			this.actionLocked = true
-			// 模拟 AI 回复和原谅值变化
-			setTimeout(() => {
-				const delta = this.calcForgivenessDelta(content)
-				this.forgiveness = Math.max(0, Math.min(100, this.forgiveness + delta))
+			try {
+				// 组装历史消息（仅取最近 10 条）
+				const history = this.messages.slice(-10).map(m => ({
+					role: m.role === 'ai' ? 'assistant' : 'user',
+					content: m.text
+				}))
+
+				const aiRes = await generateReply({
+					scene: this.scene,
+					history,
+					userInput: content,
+					forgiveness: this.forgiveness
+				})
+
+				// AI 不可用：不消耗轮次、不改变原谅值，仅提示
+				if (aiRes && aiRes.error) {
+					this.currentTurn = Math.max(0, this.currentTurn - 1)
+					this.appendMessage('ai', 'AI 暂时不能使用，请稍后再试。')
+					return
+				}
+
+				const { reply, forgivenessDelta } = aiRes || {}
+				// AI 返回缺字段也视为不可用
+				if (typeof reply !== 'string' || !reply.trim() || !Number.isFinite(forgivenessDelta)) {
+					this.currentTurn = Math.max(0, this.currentTurn - 1)
+					this.appendMessage('ai', 'AI 暂时不能使用，请稍后再试。')
+					return
+				}
+				const delta = forgivenessDelta
+
+				this.forgiveness = this.clampForgiveness(this.forgiveness + delta)
+				this.forgivenessChanges.push({
+					round: this.currentTurn,
+					change: delta,
+					final: this.forgiveness
+				})
 				const changeText = delta >= 0 ? `原谅值 +${delta}` : `原谅值 ${delta}`
-				const reply = this.buildAiReply(delta)
 				this.appendMessage('ai', reply, changeText)
 				this.checkResult()
+			} catch (err) {
+				console.error('AI 处理异常:', err)
+				// 异常同样视为 AI 不可用：不消耗轮次、不改变原谅值，仅提示
+				this.currentTurn = Math.max(0, this.currentTurn - 1)
+				this.appendMessage('ai', 'AI 暂时不能使用，请稍后再试。')
+			} finally {
 				this.actionLocked = false
-			}, 300)
-		},
-		calcForgivenessDelta(text) {
-			// 简单策略：含有“抱歉/对不起”正向，大写词负向，默认随机
-			const lower = text.toLowerCase()
-			if (lower.includes('对不起') || lower.includes('抱歉') || lower.includes('sorry')) {
-				return this.randomInt(10, 25)
 			}
-			if (lower.includes('你错') || lower.includes('怪你')) {
-				return -this.randomInt(15, 30)
-			}
-			return this.randomInt(-15, 20)
 		},
-		buildAiReply(delta) {
-			if (!this.scene) return '...'
-			if (delta >= 15) return '好吧，态度还不错。'
-			if (delta >= 5) return '嗯，勉强听进去一些。'
-			if (delta >= 0) return '我再听听，你继续说。'
-			if (delta >= -10) return '你这话让我有点生气。'
-			return '你是来气我的吗？'
-		},
-		randomInt(min, max) {
-			return Math.floor(Math.random() * (max - min + 1)) + min
+		clampForgiveness(val) {
+			return Math.max(0, Math.min(100, val))
 		},
 		checkResult() {
 			if (this.forgiveness >= 100) {
@@ -172,6 +217,7 @@ export default {
 		},
 		showResult(success, reason = '') {
 			this.actionLocked = true
+			this.persistRecord(success)
 			const title = success ? '恭喜，哄好了！' : '挑战失败'
 			const content = success
 				? `原谅值达到 100，胜利！`
@@ -190,6 +236,31 @@ export default {
 					}
 				}
 			})
+		},
+		async persistRecord(isSuccess) {
+			// 避免重复保存
+			if (this.recordSaved) return
+			this.recordSaved = true
+
+			const durationSeconds = this.startTimestamp
+				? Math.max(0, Math.round((Date.now() - this.startTimestamp) / 1000))
+				: null
+
+			try {
+				await gameRecordService.createRecord({
+					userId: this.userId || this.genAnonId(),
+					sceneId: this.sceneId,
+					isSuccess,
+					finalForgiveness: this.forgiveness,
+					interactionCount: this.currentTurn,
+					maxInteractions: this.maxTurns,
+					startForgiveness: this.startForgiveness,
+					forgivenessChanges: this.forgivenessChanges,
+					durationSeconds
+				})
+			} catch (err) {
+				console.error('保存游戏记录失败:', err)
+			}
 		}
 	}
 }

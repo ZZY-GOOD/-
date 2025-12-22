@@ -43,6 +43,7 @@ export const supabaseConfig = {
   restUrl: `${SUPABASE_URL}/rest/v1`,
   // 表名常量
   tables: {
+    users: 'users',
     scenes: 'scenes',
     userScenes: 'user_scenes',
     gameRecords: 'game_records'
