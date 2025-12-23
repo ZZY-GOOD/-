@@ -54,7 +54,7 @@
 						@click="onSceneSelect(scene)"
 					>
 						<text class="scene-title">{{scene.title}}</text>
-						<text class="scene-stats">@{{scene.times}}次(胜率 {{scene.winRate}}%)</text>
+						<text class="scene-stats">{{scene.times}}次(胜率 {{scene.winRate}}%)</text>
 					</view>
 				</view>
 			</view>
@@ -63,7 +63,7 @@
 </template>
 
 <script>
-	import { sceneService } from '@/utils/supabase-helper.js'
+	import { sceneService, gameRecordService } from '@/utils/supabase-helper.js'
 	
 	export default {
 		data() {
@@ -83,6 +83,10 @@
 			this.loadScenes()
 			// 可以自动测试一次（可选）
 			// this.testSupabaseConnection()
+		},
+		onShow() {
+			// 每次返回首页时刷新场景统计数据（挑战次数、胜率）
+			this.loadScenes()
 		},
 		computed: {
 			// 过滤并排序场景列表
@@ -123,17 +127,29 @@
 						})
 						return
 					}
-					this.scenes = (data || []).map(item => ({
-						id: item.id,
-						title: item.title,
-						category: item.category || '其他',
-						// 兼容展示字段
-						times: item.play_count ?? 0,
-						winRate: item.win_rate ?? 0,
-						play_count: item.play_count ?? 0,
-						win_rate: item.win_rate ?? 0,
-						created_at: item.created_at
-					}))
+
+					// 额外获取全局统计（从 game_records 计算，确保最新）
+					const { data: globalStats } = await gameRecordService.getGlobalSceneStats()
+
+					this.scenes = (data || []).map(item => {
+						const sid = item.id
+						const override = globalStats && globalStats[sid] ? globalStats[sid] : null
+						const playCount = override ? override.playCount : (item.play_count ?? 0)
+						const winRateRaw = override ? override.winRate : (item.win_rate ?? 0)
+						// 胜率显示到小数点后一位
+						const winRateDisplay = Number(winRateRaw || 0).toFixed(1)
+						return {
+							id: item.id,
+							title: item.title,
+							category: item.category || '其他',
+							// 兼容展示字段
+							times: playCount,
+							winRate: winRateDisplay,
+							play_count: playCount,
+							win_rate: Number(winRateRaw) || 0,
+							created_at: item.created_at
+						}
+					})
 					// 分类标签统计
 					const categoryMap = {}
 					this.scenes.forEach(s => {

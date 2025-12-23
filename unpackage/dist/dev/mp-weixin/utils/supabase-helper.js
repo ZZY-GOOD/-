@@ -160,6 +160,49 @@ const userService = {
     return { data: data && data[0] ? data[0] : null, error: null };
   }
 };
+const userSceneService = {
+  /**
+   * 提交自定义场景
+   */
+  async submitScene(sceneData) {
+    const {
+      userId,
+      userNickname,
+      title,
+      description,
+      category,
+      role,
+      roleGender,
+      angryReason,
+      expectedDifficulty
+    } = sceneData;
+    const { data, error } = await config_supabase.supabase.insert(config_supabase.supabaseConfig.tables.userScenes, {
+      user_id: userId,
+      user_nickname: userNickname,
+      title,
+      description,
+      category,
+      role,
+      role_gender: roleGender || "其他",
+      angry_reason: angryReason,
+      expected_difficulty: expectedDifficulty || "中",
+      status: "pending"
+    });
+    return { data, error };
+  },
+  /**
+   * 获取用户的提交记录
+   */
+  async getUserSubmissions(userId) {
+    const { data, error } = await config_supabase.supabase.select(config_supabase.supabaseConfig.tables.userScenes, {
+      filters: [`user_id=eq.${encodeURIComponent(userId)}`],
+      query: {
+        order: "created_at.desc"
+      }
+    });
+    return { data, error };
+  }
+};
 const gameRecordService = {
   /**
    * 创建游戏记录
@@ -273,9 +316,46 @@ const gameRecordService = {
       }
     });
     return { data, error };
+  },
+  /**
+   * 获取所有场景的全局统计（总挑战次数 & 平均胜率）
+   * 用于首页场景卡片展示
+   */
+  async getGlobalSceneStats(limit = 1e4) {
+    const { data, error } = await config_supabase.supabase.select(config_supabase.supabaseConfig.tables.gameRecords, {
+      select: "scene_id,is_success",
+      query: {
+        limit
+      }
+    });
+    if (error || !data)
+      return { data: null, error };
+    const statsMap = {};
+    data.forEach((rec) => {
+      const sid = rec.scene_id;
+      if (!sid)
+        return;
+      if (!statsMap[sid]) {
+        statsMap[sid] = {
+          playCount: 0,
+          winCount: 0
+        };
+      }
+      statsMap[sid].playCount += 1;
+      if (rec.is_success) {
+        statsMap[sid].winCount += 1;
+      }
+    });
+    Object.keys(statsMap).forEach((sid) => {
+      const { playCount, winCount } = statsMap[sid];
+      const rate = playCount > 0 ? winCount / playCount * 100 : 0;
+      statsMap[sid].winRate = Number(rate.toFixed(1));
+    });
+    return { data: statsMap, error: null };
   }
 };
 exports.gameRecordService = gameRecordService;
 exports.sceneService = sceneService;
+exports.userSceneService = userSceneService;
 exports.userService = userService;
 //# sourceMappingURL=../../.sourcemap/mp-weixin/utils/supabase-helper.js.map

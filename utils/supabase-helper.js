@@ -378,6 +378,47 @@ export const gameRecordService = {
     })
 
     return { data, error }
+  },
+
+  /**
+   * 获取所有场景的全局统计（总挑战次数 & 平均胜率）
+   * 用于首页场景卡片展示
+   */
+  async getGlobalSceneStats(limit = 10000) {
+    const { data, error } = await supabase.select(supabaseConfig.tables.gameRecords, {
+      select: 'scene_id,is_success',
+      query: {
+        limit
+      }
+    })
+
+    if (error || !data) return { data: null, error }
+
+    const statsMap = {}
+
+    data.forEach(rec => {
+      const sid = rec.scene_id
+      if (!sid) return
+      if (!statsMap[sid]) {
+        statsMap[sid] = {
+          playCount: 0,
+          winCount: 0
+        }
+      }
+      statsMap[sid].playCount += 1
+      if (rec.is_success) {
+        statsMap[sid].winCount += 1
+      }
+    })
+
+    // 计算胜率
+    Object.keys(statsMap).forEach(sid => {
+      const { playCount, winCount } = statsMap[sid]
+      const rate = playCount > 0 ? (winCount / playCount) * 100 : 0
+      statsMap[sid].winRate = Number(rate.toFixed(1))
+    })
+
+    return { data: statsMap, error: null }
   }
 }
 

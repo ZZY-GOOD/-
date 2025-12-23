@@ -18,6 +18,9 @@ const _sfc_main = {
   onLoad() {
     this.loadScenes();
   },
+  onShow() {
+    this.loadScenes();
+  },
   computed: {
     // 过滤并排序场景列表
     filteredScenes() {
@@ -47,24 +50,32 @@ const _sfc_main = {
           order: "desc"
         });
         if (error) {
-          common_vendor.index.__f__("error", "at pages/index/index.vue:119", "加载场景失败:", error);
+          common_vendor.index.__f__("error", "at pages/index/index.vue:123", "加载场景失败:", error);
           common_vendor.index.showToast({
             title: "加载场景失败",
             icon: "none"
           });
           return;
         }
-        this.scenes = (data || []).map((item) => ({
-          id: item.id,
-          title: item.title,
-          category: item.category || "其他",
-          // 兼容展示字段
-          times: item.play_count ?? 0,
-          winRate: item.win_rate ?? 0,
-          play_count: item.play_count ?? 0,
-          win_rate: item.win_rate ?? 0,
-          created_at: item.created_at
-        }));
+        const { data: globalStats } = await utils_supabaseHelper.gameRecordService.getGlobalSceneStats();
+        this.scenes = (data || []).map((item) => {
+          const sid = item.id;
+          const override = globalStats && globalStats[sid] ? globalStats[sid] : null;
+          const playCount = override ? override.playCount : item.play_count ?? 0;
+          const winRateRaw = override ? override.winRate : item.win_rate ?? 0;
+          const winRateDisplay = Number(winRateRaw || 0).toFixed(1);
+          return {
+            id: item.id,
+            title: item.title,
+            category: item.category || "其他",
+            // 兼容展示字段
+            times: playCount,
+            winRate: winRateDisplay,
+            play_count: playCount,
+            win_rate: Number(winRateRaw) || 0,
+            created_at: item.created_at
+          };
+        });
         const categoryMap = {};
         this.scenes.forEach((s) => {
           categoryMap[s.category] = (categoryMap[s.category] || 0) + 1;
@@ -74,7 +85,7 @@ const _sfc_main = {
         );
         this.activeCategory = "全部";
       } catch (err) {
-        common_vendor.index.__f__("error", "at pages/index/index.vue:148", "加载场景异常:", err);
+        common_vendor.index.__f__("error", "at pages/index/index.vue:164", "加载场景异常:", err);
         common_vendor.index.showToast({
           title: "加载异常",
           icon: "none"
@@ -88,13 +99,13 @@ const _sfc_main = {
       this.testing = true;
       this.testResult = null;
       try {
-        common_vendor.index.__f__("log", "at pages/index/index.vue:164", "开始测试 Supabase 连接...");
+        common_vendor.index.__f__("log", "at pages/index/index.vue:180", "开始测试 Supabase 连接...");
         const { data, error } = await utils_supabaseHelper.sceneService.getAllScenes({
           status: "active",
           limit: 100
         });
         if (error) {
-          common_vendor.index.__f__("error", "at pages/index/index.vue:173", "数据库连接失败:", error);
+          common_vendor.index.__f__("error", "at pages/index/index.vue:189", "数据库连接失败:", error);
           this.testResult = {
             type: "error",
             message: `❌ 连接失败: ${error.message || error}`
@@ -107,7 +118,7 @@ const _sfc_main = {
           return;
         }
         const sceneCount = data ? data.length : 0;
-        common_vendor.index.__f__("log", "at pages/index/index.vue:188", "✅ 连接成功！找到", sceneCount, "个场景");
+        common_vendor.index.__f__("log", "at pages/index/index.vue:204", "✅ 连接成功！找到", sceneCount, "个场景");
         this.testResult = {
           type: "success",
           message: `✅ 连接成功！找到 ${sceneCount} 个场景`
@@ -118,10 +129,10 @@ const _sfc_main = {
           duration: 2e3
         });
         if (data && data.length > 0) {
-          common_vendor.index.__f__("log", "at pages/index/index.vue:203", "场景数据:", data);
+          common_vendor.index.__f__("log", "at pages/index/index.vue:219", "场景数据:", data);
         }
       } catch (err) {
-        common_vendor.index.__f__("error", "at pages/index/index.vue:209", "测试异常:", err);
+        common_vendor.index.__f__("error", "at pages/index/index.vue:225", "测试异常:", err);
         this.testResult = {
           type: "error",
           message: `❌ 测试异常: ${err.message || "未知错误"}`
