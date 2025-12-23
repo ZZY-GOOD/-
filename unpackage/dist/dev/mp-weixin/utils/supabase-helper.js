@@ -107,11 +107,12 @@ const userService = {
       loginType = "guest",
       wxOpenid = null
     } = userData;
+    const filterKey = wxOpenid ? `wx_openid=eq.${encodeURIComponent(wxOpenid)}` : `user_id=eq.${encodeURIComponent(userId)}`;
     const { data: existingUser, error: queryError } = await config_supabase.supabase.select(
       config_supabase.supabaseConfig.tables.users,
       {
-        filters: [`user_id=eq.${encodeURIComponent(userId)}`],
-        select: "id"
+        filters: [filterKey],
+        select: "id,user_id"
       }
     );
     if (queryError) {
@@ -126,9 +127,10 @@ const userService = {
       updated_at: (/* @__PURE__ */ new Date()).toISOString()
     };
     if (existingUser && existingUser.length > 0) {
+      const targetUserId = existingUser[0].user_id || userId;
       const { data, error } = await config_supabase.supabase.update(
         config_supabase.supabaseConfig.tables.users,
-        { user_id: userId },
+        { user_id: targetUserId },
         userPayload
       );
       return { data, error };

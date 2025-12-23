@@ -106,6 +106,7 @@ export default {
 		data() {
 			return {
 				userId: '',
+				wxOpenid: '',
 				nickname: '',
 				avatar: '/static/user.png',
 				stats: {
@@ -137,25 +138,32 @@ export default {
 			const storedId = uni.getStorageSync('userId') || ''
 			const storedName = uni.getStorageSync('userName') || ''
 			const storedAvatar = uni.getStorageSync('userAvatar') || ''
-			this.userId = storedId || this.genAnonId()
+			const storedWxOpenid = uni.getStorageSync('wxOpenid') || ''
+			// 优先使用已存的 openid 作为 userId，确保身份稳定
+			this.userId = storedWxOpenid || storedId || this.genAnonId()
+			this.wxOpenid = storedWxOpenid || ''
 			this.nickname = storedName || ''
 			if (storedAvatar) this.avatar = storedAvatar
 		},
-		async saveUser() {
+		async saveUser(extra = {}) {
 			// 保存到本地存储
-			const finalUserId = this.userId || this.genAnonId()
+			const finalUserId = this.wxOpenid || this.userId || this.genAnonId()
 			uni.setStorageSync('userId', finalUserId)
 			uni.setStorageSync('userName', this.nickname || '')
 			uni.setStorageSync('userAvatar', this.avatar || '/static/user.png')
 			uni.setStorageSync('loginType', this.loginType || 'guest')
+			if (extra.wxOpenid || this.wxOpenid) {
+				uni.setStorageSync('wxOpenid', extra.wxOpenid || this.wxOpenid)
+			}
 			
 			// 保存到 Supabase 数据库
 			try {
 				const { data, error } = await userService.createOrUpdateUser({
-					userId: this.userId || this.genAnonId(),
+					userId: finalUserId,
 					nickname: this.nickname,
 					avatarUrl: this.avatar !== '/static/user.png' ? this.avatar : null,
-					loginType: this.loginType || 'guest'
+					loginType: this.loginType || 'guest',
+					wxOpenid: extra.wxOpenid || this.wxOpenid || null
 				})
 				
 				if (error) {
@@ -215,30 +223,81 @@ export default {
 		},
 		wxAuthorize() {
 			// #ifdef MP-WEIXIN
-			// 直接调用 getUserProfile，微信会弹出系统授权弹窗（带“拒绝 / 允许”按钮）
-			uni.getUserProfile({
-				desc: '用于完善个人资料',
-				success: async (res) => {
-					if (res.userInfo) {
-						this.nickname = res.userInfo.nickName || this.nickname
-						this.avatar = res.userInfo.avatarUrl || this.avatar
-						this.loginType = 'wx'
-						await this.saveUser()
-						this.closeBottomSheet()
-					}
-				},
-				fail: (err) => {
-					console.log('getUserProfile fail', err) // 打印具体错误
-					uni.showToast({
-						title: (err && err.errMsg) ? err.errMsg : '授权失败',
-						icon: 'none'
-					})
-				}
-			})
+			this.wxAuthorizeAndBind()
 			// #endif
 			// #ifndef MP-WEIXIN
 			uni.showToast({ title: '仅支持微信小程序', icon: 'none' })
 			// #endif
+		},
+		// 微信授权 + 云函数 login 获取 openid + 同步到数据库
+		async wxAuthorizeAndBind() {
+			try {
+				const profile = await new Promise((resolve, reject) => {
+					uni.getUserProfile({
+						desc: '用于完善个人资料',
+						success: (res) => resolve(res.userInfo || {}),
+						fail: reject
+					})
+				})
+
+				const openid = await this.ensureWxOpenid()
+				this.wxOpenid = openid
+				// 使用 openid 作为 userId，避免重复记录
+				this.userId = openid
+				this.nickname = profile.nickName || this.nickname
+				this.avatar = profile.avatarUrl || this.avatar
+				this.loginType = 'wx'
+
+				await this.saveUser({ wxOpenid: openid })
+				this.closeBottomSheet()
+				uni.showToast({ title: '登录成功', icon: 'success' })
+			} catch (err) {
+				console.error('微信授权失败', err)
+				uni.showToast({
+					title: err?.errMsg || '授权失败',
+					icon: 'none'
+				})
+			}
+		},
+		// 调用云函数 login 获取 openid
+		getWxOpenid() {
+			return new Promise((resolve, reject) => {
+				// #ifdef MP-WEIXIN
+				if (!wx.cloud) {
+					reject(new Error('wx.cloud 未初始化'))
+					return
+				}
+				wx.cloud.callFunction({
+					name: 'login',
+					success: (res) => {
+						const openid = res?.result?.openid
+						if (openid) resolve(openid)
+						else reject(new Error('未获取到 openid'))
+					},
+					fail: reject
+				})
+				// #endif
+				// #ifndef MP-WEIXIN
+				reject(new Error('仅支持微信小程序'))
+				// #endif
+			})
+		},
+		// 确保拿到 openid；拿不到时回退为 guest
+		async ensureWxOpenid() {
+			if (this.wxOpenid) return this.wxOpenid
+			try {
+				const openid = await this.getWxOpenid()
+				this.wxOpenid = openid
+				this.userId = openid
+				this.loginType = 'wx'
+				uni.setStorageSync('wxOpenid', openid)
+				return openid
+			} catch (err) {
+				// 无法获取 openid 时回退 guest，但会造成新用户；日志提示
+				console.warn('获取 openid 失败，回退 guest：', err)
+				this.loginType = 'guest'
+				return null
+			}
 		},
 		changeAvatar() {
 			// 个人中心页面头像不可点击编辑
@@ -256,8 +315,14 @@ export default {
 						this.showManualOptions()
 						// 如果昵称也有了，自动保存并关闭
 						if (this.nickname) {
-							this.loginType = 'guest'
-							await this.saveUser()
+							const openid = await this.ensureWxOpenid()
+							if (openid) {
+								this.userId = openid
+								this.loginType = 'wx'
+							} else {
+								this.loginType = 'guest'
+							}
+							await this.saveUser({ wxOpenid: openid || null })
 							this.closeBottomSheet()
 						} else {
 							// 头像已选，提示填写昵称
@@ -277,11 +342,18 @@ export default {
 				return
 			}
 			this.nickname = this.inputName.trim()
-			this.loginType = 'guest'
+			// 尝试获取 openid，让手动填写也绑定同一身份
+			const openid = await this.ensureWxOpenid()
+			if (openid) {
+				this.userId = openid
+				this.loginType = 'wx'
+			} else {
+				this.loginType = 'guest'
+			}
 			// 如果头像也有了，自动保存
 			if (this.selectedAvatar) {
 				this.avatar = this.selectedAvatar
-				await this.saveUser()
+				await this.saveUser({ wxOpenid: openid || null })
 			} else {
 				// 昵称已填，提示选择头像
 				uni.showToast({ title: '昵称已保存，请选择头像', icon: 'none' })
@@ -327,8 +399,10 @@ export default {
 					uni.removeStorageSync('userName')
 					uni.removeStorageSync('userAvatar')
 					uni.removeStorageSync('loginType')
+					uni.removeStorageSync('wxOpenid')
 					// 重置数据
 					this.userId = ''
+					this.wxOpenid = ''
 					this.nickname = ''
 					this.avatar = '/static/user.png'
 					this.selectedAvatar = ''

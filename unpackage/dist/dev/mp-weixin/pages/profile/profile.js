@@ -5,6 +5,7 @@ const _sfc_main = {
   data() {
     return {
       userId: "",
+      wxOpenid: "",
       nickname: "",
       avatar: "/static/user.png",
       stats: {
@@ -38,29 +39,35 @@ const _sfc_main = {
       const storedId = common_vendor.index.getStorageSync("userId") || "";
       const storedName = common_vendor.index.getStorageSync("userName") || "";
       const storedAvatar = common_vendor.index.getStorageSync("userAvatar") || "";
-      this.userId = storedId || this.genAnonId();
+      const storedWxOpenid = common_vendor.index.getStorageSync("wxOpenid") || "";
+      this.userId = storedWxOpenid || storedId || this.genAnonId();
+      this.wxOpenid = storedWxOpenid || "";
       this.nickname = storedName || "";
       if (storedAvatar)
         this.avatar = storedAvatar;
     },
-    async saveUser() {
-      const finalUserId = this.userId || this.genAnonId();
+    async saveUser(extra = {}) {
+      const finalUserId = this.wxOpenid || this.userId || this.genAnonId();
       common_vendor.index.setStorageSync("userId", finalUserId);
       common_vendor.index.setStorageSync("userName", this.nickname || "");
       common_vendor.index.setStorageSync("userAvatar", this.avatar || "/static/user.png");
       common_vendor.index.setStorageSync("loginType", this.loginType || "guest");
+      if (extra.wxOpenid || this.wxOpenid) {
+        common_vendor.index.setStorageSync("wxOpenid", extra.wxOpenid || this.wxOpenid);
+      }
       try {
         const { data, error } = await utils_supabaseHelper.userService.createOrUpdateUser({
-          userId: this.userId || this.genAnonId(),
+          userId: finalUserId,
           nickname: this.nickname,
           avatarUrl: this.avatar !== "/static/user.png" ? this.avatar : null,
-          loginType: this.loginType || "guest"
+          loginType: this.loginType || "guest",
+          wxOpenid: extra.wxOpenid || this.wxOpenid || null
         });
         if (error) {
-          common_vendor.index.__f__("error", "at pages/profile/profile.vue:162", "保存用户信息到数据库失败:", error);
+          common_vendor.index.__f__("error", "at pages/profile/profile.vue:170", "保存用户信息到数据库失败:", error);
         }
       } catch (err) {
-        common_vendor.index.__f__("error", "at pages/profile/profile.vue:166", "保存用户信息异常:", err);
+        common_vendor.index.__f__("error", "at pages/profile/profile.vue:174", "保存用户信息异常:", err);
       }
       common_vendor.index.showToast({ title: "已保存", icon: "success" });
     },
@@ -108,25 +115,72 @@ const _sfc_main = {
       this.bottomSheetOptions = [];
     },
     wxAuthorize() {
-      common_vendor.index.getUserProfile({
-        desc: "用于完善个人资料",
-        success: async (res) => {
-          if (res.userInfo) {
-            this.nickname = res.userInfo.nickName || this.nickname;
-            this.avatar = res.userInfo.avatarUrl || this.avatar;
-            this.loginType = "wx";
-            await this.saveUser();
-            this.closeBottomSheet();
-          }
-        },
-        fail: (err) => {
-          common_vendor.index.__f__("log", "at pages/profile/profile.vue:231", "getUserProfile fail", err);
-          common_vendor.index.showToast({
-            title: err && err.errMsg ? err.errMsg : "授权失败",
-            icon: "none"
+      this.wxAuthorizeAndBind();
+    },
+    // 微信授权 + 云函数 login 获取 openid + 同步到数据库
+    async wxAuthorizeAndBind() {
+      try {
+        const profile = await new Promise((resolve, reject) => {
+          common_vendor.index.getUserProfile({
+            desc: "用于完善个人资料",
+            success: (res) => resolve(res.userInfo || {}),
+            fail: reject
           });
+        });
+        const openid = await this.ensureWxOpenid();
+        this.wxOpenid = openid;
+        this.userId = openid;
+        this.nickname = profile.nickName || this.nickname;
+        this.avatar = profile.avatarUrl || this.avatar;
+        this.loginType = "wx";
+        await this.saveUser({ wxOpenid: openid });
+        this.closeBottomSheet();
+        common_vendor.index.showToast({ title: "登录成功", icon: "success" });
+      } catch (err) {
+        common_vendor.index.__f__("error", "at pages/profile/profile.vue:255", "微信授权失败", err);
+        common_vendor.index.showToast({
+          title: (err == null ? void 0 : err.errMsg) || "授权失败",
+          icon: "none"
+        });
+      }
+    },
+    // 调用云函数 login 获取 openid
+    getWxOpenid() {
+      return new Promise((resolve, reject) => {
+        if (!common_vendor.wx$1.cloud) {
+          reject(new Error("wx.cloud 未初始化"));
+          return;
         }
+        common_vendor.wx$1.cloud.callFunction({
+          name: "login",
+          success: (res) => {
+            var _a;
+            const openid = (_a = res == null ? void 0 : res.result) == null ? void 0 : _a.openid;
+            if (openid)
+              resolve(openid);
+            else
+              reject(new Error("未获取到 openid"));
+          },
+          fail: reject
+        });
       });
+    },
+    // 确保拿到 openid；拿不到时回退为 guest
+    async ensureWxOpenid() {
+      if (this.wxOpenid)
+        return this.wxOpenid;
+      try {
+        const openid = await this.getWxOpenid();
+        this.wxOpenid = openid;
+        this.userId = openid;
+        this.loginType = "wx";
+        common_vendor.index.setStorageSync("wxOpenid", openid);
+        return openid;
+      } catch (err) {
+        common_vendor.index.__f__("warn", "at pages/profile/profile.vue:297", "获取 openid 失败，回退 guest：", err);
+        this.loginType = "guest";
+        return null;
+      }
     },
     changeAvatar() {
     },
@@ -141,8 +195,14 @@ const _sfc_main = {
             this.avatar = res.tempFilePaths[0];
             this.showManualOptions();
             if (this.nickname) {
-              this.loginType = "guest";
-              await this.saveUser();
+              const openid = await this.ensureWxOpenid();
+              if (openid) {
+                this.userId = openid;
+                this.loginType = "wx";
+              } else {
+                this.loginType = "guest";
+              }
+              await this.saveUser({ wxOpenid: openid || null });
               this.closeBottomSheet();
             } else {
               common_vendor.index.showToast({ title: "头像已选择，请填写昵称", icon: "none" });
@@ -161,10 +221,16 @@ const _sfc_main = {
         return;
       }
       this.nickname = this.inputName.trim();
-      this.loginType = "guest";
+      const openid = await this.ensureWxOpenid();
+      if (openid) {
+        this.userId = openid;
+        this.loginType = "wx";
+      } else {
+        this.loginType = "guest";
+      }
       if (this.selectedAvatar) {
         this.avatar = this.selectedAvatar;
-        await this.saveUser();
+        await this.saveUser({ wxOpenid: openid || null });
       } else {
         common_vendor.index.showToast({ title: "昵称已保存，请选择头像", icon: "none" });
         this.showManualOptions();
@@ -209,7 +275,9 @@ const _sfc_main = {
             common_vendor.index.removeStorageSync("userName");
             common_vendor.index.removeStorageSync("userAvatar");
             common_vendor.index.removeStorageSync("loginType");
+            common_vendor.index.removeStorageSync("wxOpenid");
             this.userId = "";
+            this.wxOpenid = "";
             this.nickname = "";
             this.avatar = "/static/user.png";
             this.selectedAvatar = "";

@@ -89,11 +89,15 @@
 			this.loadScenes()
 		},
 		computed: {
-			// 过滤并排序场景列表
+			// 过滤并排序场景列表（支持多分类）
 			filteredScenes() {
 				let list = this.activeCategory === '全部'
 					? this.scenes
-					: this.scenes.filter(scene => scene.category === this.activeCategory)
+					: this.scenes.filter(scene => {
+						// 处理多分类（逗号分隔）
+						const categories = (scene.category || '').split(',').map(c => c.trim())
+						return categories.includes(this.activeCategory)
+					})
 				
 				const option = this.sortOptions[this.sortIndex]
 				if (option === '最新') {
@@ -150,10 +154,20 @@
 							created_at: item.created_at
 						}
 					})
-					// 分类标签统计
+					// 分类标签统计（支持多分类，用逗号分隔）
 					const categoryMap = {}
 					this.scenes.forEach(s => {
-						categoryMap[s.category] = (categoryMap[s.category] || 0) + 1
+						// 处理多分类（逗号分隔）
+						const categories = (s.category || '').split(',').map(c => c.trim()).filter(c => c)
+						if (categories.length === 0) {
+							// 如果没有分类，归类为"其他"
+							categoryMap['其他'] = (categoryMap['其他'] || 0) + 1
+						} else {
+							// 每个分类都计数
+							categories.forEach(cat => {
+								categoryMap[cat] = (categoryMap[cat] || 0) + 1
+							})
+						}
 					})
 					this.categories = [{ name: '全部', count: this.scenes.length }].concat(
 						Object.entries(categoryMap).map(([name, count]) => ({ name, count }))

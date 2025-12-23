@@ -22,9 +22,12 @@ const _sfc_main = {
     this.loadScenes();
   },
   computed: {
-    // 过滤并排序场景列表
+    // 过滤并排序场景列表（支持多分类）
     filteredScenes() {
-      let list = this.activeCategory === "全部" ? this.scenes : this.scenes.filter((scene) => scene.category === this.activeCategory);
+      let list = this.activeCategory === "全部" ? this.scenes : this.scenes.filter((scene) => {
+        const categories = (scene.category || "").split(",").map((c) => c.trim());
+        return categories.includes(this.activeCategory);
+      });
       const option = this.sortOptions[this.sortIndex];
       if (option === "最新") {
         list = [...list].sort((a, b) => new Date(b.created_at || 0) - new Date(a.created_at || 0));
@@ -50,7 +53,7 @@ const _sfc_main = {
           order: "desc"
         });
         if (error) {
-          common_vendor.index.__f__("error", "at pages/index/index.vue:123", "加载场景失败:", error);
+          common_vendor.index.__f__("error", "at pages/index/index.vue:127", "加载场景失败:", error);
           common_vendor.index.showToast({
             title: "加载场景失败",
             icon: "none"
@@ -78,14 +81,21 @@ const _sfc_main = {
         });
         const categoryMap = {};
         this.scenes.forEach((s) => {
-          categoryMap[s.category] = (categoryMap[s.category] || 0) + 1;
+          const categories = (s.category || "").split(",").map((c) => c.trim()).filter((c) => c);
+          if (categories.length === 0) {
+            categoryMap["其他"] = (categoryMap["其他"] || 0) + 1;
+          } else {
+            categories.forEach((cat) => {
+              categoryMap[cat] = (categoryMap[cat] || 0) + 1;
+            });
+          }
         });
         this.categories = [{ name: "全部", count: this.scenes.length }].concat(
           Object.entries(categoryMap).map(([name, count]) => ({ name, count }))
         );
         this.activeCategory = "全部";
       } catch (err) {
-        common_vendor.index.__f__("error", "at pages/index/index.vue:164", "加载场景异常:", err);
+        common_vendor.index.__f__("error", "at pages/index/index.vue:178", "加载场景异常:", err);
         common_vendor.index.showToast({
           title: "加载异常",
           icon: "none"
@@ -99,13 +109,13 @@ const _sfc_main = {
       this.testing = true;
       this.testResult = null;
       try {
-        common_vendor.index.__f__("log", "at pages/index/index.vue:180", "开始测试 Supabase 连接...");
+        common_vendor.index.__f__("log", "at pages/index/index.vue:194", "开始测试 Supabase 连接...");
         const { data, error } = await utils_supabaseHelper.sceneService.getAllScenes({
           status: "active",
           limit: 100
         });
         if (error) {
-          common_vendor.index.__f__("error", "at pages/index/index.vue:189", "数据库连接失败:", error);
+          common_vendor.index.__f__("error", "at pages/index/index.vue:203", "数据库连接失败:", error);
           this.testResult = {
             type: "error",
             message: `❌ 连接失败: ${error.message || error}`
@@ -118,7 +128,7 @@ const _sfc_main = {
           return;
         }
         const sceneCount = data ? data.length : 0;
-        common_vendor.index.__f__("log", "at pages/index/index.vue:204", "✅ 连接成功！找到", sceneCount, "个场景");
+        common_vendor.index.__f__("log", "at pages/index/index.vue:218", "✅ 连接成功！找到", sceneCount, "个场景");
         this.testResult = {
           type: "success",
           message: `✅ 连接成功！找到 ${sceneCount} 个场景`
@@ -129,10 +139,10 @@ const _sfc_main = {
           duration: 2e3
         });
         if (data && data.length > 0) {
-          common_vendor.index.__f__("log", "at pages/index/index.vue:219", "场景数据:", data);
+          common_vendor.index.__f__("log", "at pages/index/index.vue:233", "场景数据:", data);
         }
       } catch (err) {
-        common_vendor.index.__f__("error", "at pages/index/index.vue:225", "测试异常:", err);
+        common_vendor.index.__f__("error", "at pages/index/index.vue:239", "测试异常:", err);
         this.testResult = {
           type: "error",
           message: `❌ 测试异常: ${err.message || "未知错误"}`

@@ -132,12 +132,16 @@ export const userService = {
       wxOpenid = null
     } = userData
 
-    // 先查询用户是否存在
+    // 先按 wx_openid 查（如果有），否则按 user_id 查
+    const filterKey = wxOpenid
+      ? `wx_openid=eq.${encodeURIComponent(wxOpenid)}`
+      : `user_id=eq.${encodeURIComponent(userId)}`
+
     const { data: existingUser, error: queryError } = await supabase.select(
       supabaseConfig.tables.users,
       {
-        filters: [`user_id=eq.${encodeURIComponent(userId)}`],
-        select: 'id'
+        filters: [filterKey],
+        select: 'id,user_id'
       }
     )
 
@@ -155,10 +159,11 @@ export const userService = {
     }
 
     if (existingUser && existingUser.length > 0) {
-      // 更新现有用户
+      // 更新现有用户，优先用已存在的 user_id 进行更新
+      const targetUserId = existingUser[0].user_id || userId
       const { data, error } = await supabase.update(
         supabaseConfig.tables.users,
-        { user_id: userId },
+        { user_id: targetUserId },
         userPayload
       )
       return { data, error }

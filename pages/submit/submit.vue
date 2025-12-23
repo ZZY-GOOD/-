@@ -31,16 +31,21 @@
 				<!-- 场景分类 -->
 				<view class="form-item">
 					<text class="label">场景分类 <text class="required">*</text></text>
-					<picker 
-						@change="onCategoryChange" 
-						:value="categoryIndex" 
-						:range="categoryOptions"
-						class="picker"
-					>
-						<view class="picker-text">
-							{{ formData.category || '请选择分类' }}
+					<text class="hint">可选择多个分类</text>
+					<view class="category-tags">
+						<view 
+							v-for="(cat, index) in categoryOptions" 
+							:key="index"
+							class="category-tag"
+							:class="{ active: selectedCategories.includes(cat) }"
+							@click="toggleCategory(cat)"
+						>
+							{{ cat }}
 						</view>
-					</picker>
+					</view>
+					<view v-if="selectedCategories.length > 0" class="selected-categories">
+						已选择：{{ selectedCategories.join('、') }}
+					</view>
 				</view>
 				
 				<!-- 对象角色 -->
@@ -115,7 +120,7 @@
 import { sceneService, userSceneService } from '@/utils/supabase-helper.js'
 
 export default {
-	data() {
+		data() {
 		return {
 			formData: {
 				title: '',
@@ -127,7 +132,7 @@ export default {
 				expectedDifficulty: '中'
 			},
 			categoryOptions: [],
-			categoryIndex: 0,
+			selectedCategories: [],
 			genderOptions: ['男', '女', '其他'],
 			genderIndex: 2,
 			difficultyOptions: ['易', '中', '难'],
@@ -147,6 +152,24 @@ export default {
 			this.userNickname = uni.getStorageSync('userName') || '匿名用户'
 		},
 		async loadCategories() {
+			// 定义完整的默认分类列表
+			const defaultCategories = [
+				'情侣',
+				'亲人',
+				'朋友',
+				'同学',
+				'室友',
+				'职场',
+				'同事',
+				'上司',
+				'老师',
+				'网友',
+				'二次元',
+				'角色扮演',
+				'奇怪',
+				'其他'
+			]
+			
 			try {
 				const { data, error } = await sceneService.getAllScenes({
 					status: 'active',
@@ -155,15 +178,13 @@ export default {
 				
 				if (error) {
 					console.error('加载分类失败:', error)
-					uni.showToast({
-						title: '加载分类失败',
-						icon: 'none'
-					})
+					// 使用默认分类
+					this.categoryOptions = defaultCategories
 					return
 				}
 				
-				// 提取所有分类并去重
-				const categorySet = new Set()
+				// 提取所有分类并去重，合并默认分类
+				const categorySet = new Set(defaultCategories)
 				if (data && data.length > 0) {
 					data.forEach(scene => {
 						if (scene.category) {
@@ -172,22 +193,26 @@ export default {
 					})
 				}
 				
-				// 转换为数组并排序
-				this.categoryOptions = Array.from(categorySet).sort()
-				
-				// 如果没有分类，提供默认选项
-				if (this.categoryOptions.length === 0) {
-					this.categoryOptions = ['情侣', '亲人', '职场', '奇怪', '角色扮演', '其他']
-				}
+				// 转换为数组并排序，保持默认分类在前
+				const dbCategories = Array.from(categorySet).filter(c => !defaultCategories.includes(c))
+				this.categoryOptions = [...defaultCategories, ...dbCategories.sort()]
 			} catch (err) {
 				console.error('加载分类异常:', err)
 				// 使用默认分类
-				this.categoryOptions = ['情侣', '亲人', '职场', '奇怪', '角色扮演', '其他']
+				this.categoryOptions = defaultCategories
 			}
 		},
-		onCategoryChange(e) {
-			this.categoryIndex = e.detail.value
-			this.formData.category = this.categoryOptions[e.detail.value]
+		toggleCategory(category) {
+			const index = this.selectedCategories.indexOf(category)
+			if (index > -1) {
+				// 取消选择
+				this.selectedCategories.splice(index, 1)
+			} else {
+				// 添加选择
+				this.selectedCategories.push(category)
+			}
+			// 更新表单数据，用逗号连接多个分类
+			this.formData.category = this.selectedCategories.join(',')
 		},
 		onGenderChange(e) {
 			this.genderIndex = e.detail.value
@@ -206,9 +231,9 @@ export default {
 				return false
 			}
 			
-			if (!this.formData.category) {
+			if (this.selectedCategories.length === 0) {
 				uni.showToast({
-					title: '请选择场景分类',
+					title: '请至少选择一个场景分类',
 					icon: 'none'
 				})
 				return false
@@ -293,7 +318,7 @@ export default {
 							angryReason: '',
 							expectedDifficulty: '中'
 						}
-						this.categoryIndex = 0
+						this.selectedCategories = []
 						this.genderIndex = 2
 						this.difficultyIndex = 1
 						
@@ -449,5 +474,44 @@ export default {
 
 .back-btn:active {
 	background: #e0e0e0;
+}
+
+.hint {
+	font-size: 24rpx;
+	color: #999;
+	margin-bottom: 16rpx;
+	display: block;
+}
+
+.category-tags {
+	display: flex;
+	flex-wrap: wrap;
+	gap: 16rpx;
+	margin-bottom: 16rpx;
+}
+
+.category-tag {
+	padding: 12rpx 24rpx;
+	background: #f5f5f5;
+	border-radius: 20rpx;
+	font-size: 26rpx;
+	color: #666;
+	border: 2rpx solid transparent;
+	transition: all 0.3s;
+}
+
+.category-tag.active {
+	background: #4f46e5;
+	color: #fff;
+	border-color: #4f46e5;
+}
+
+.selected-categories {
+	font-size: 24rpx;
+	color: #4f46e5;
+	margin-top: 12rpx;
+	padding: 12rpx;
+	background: #f0f0ff;
+	border-radius: 8rpx;
 }
 </style>
