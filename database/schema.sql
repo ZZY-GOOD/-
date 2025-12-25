@@ -17,7 +17,7 @@ CREATE TABLE IF NOT EXISTS scenes (
     role VARCHAR(50) NOT NULL,
     role_gender VARCHAR(10) DEFAULT '其他',
     angry_reason TEXT NOT NULL,
-    initial_forgiveness INTEGER DEFAULT 20,
+    initial_forgiveness INTEGER DEFAULT 40,
     max_interactions INTEGER DEFAULT 10,
     difficulty VARCHAR(10) DEFAULT '中',
     

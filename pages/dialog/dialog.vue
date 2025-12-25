@@ -19,7 +19,7 @@
 		</view>
 
 		<!-- 聊天区 -->
-		<scroll-view class="chat-list" :scroll-y="true" scroll-with-animation :scroll-into-view="lastMsgId">
+		<scroll-view class="chat-list" :class="{ 'game-ended': gameEnded }" :scroll-y="true" scroll-with-animation :scroll-into-view="lastMsgId">
 			<view
 				v-for="(msg, idx) in messages"
 				:key="msg.id"
@@ -35,17 +35,28 @@
 			</view>
 		</scroll-view>
 
-		<!-- 输入区 -->
-		<view class="input-area">
-			<input
-				class="text-input"
+		<!-- 游戏结束提示 -->
+		<view v-if="gameEnded" class="result-banner" :class="gameResult.success ? 'success' : 'failed'">
+			<text class="result-text">{{ gameResult.message }}</text>
+		</view>
+
+		<!-- 输入区（游戏进行中） -->
+		<view v-if="!gameEnded" class="input-area">
+			<textarea
+				class="text-input multiline"
 				v-model="inputText"
 				:disabled="actionLocked"
 				placeholder="快，说点什么"
-				confirm-type="send"
-				@confirm="handleSend"
+				auto-height
+				:maxlength="-1"
 			/>
 			<button class="send-btn" type="primary" :disabled="actionLocked" @click="handleSend">发送</button>
+		</view>
+
+		<!-- 操作按钮（游戏结束后） -->
+		<view v-if="gameEnded" class="action-buttons">
+			<button class="action-btn restart-btn" @click="handleRestart">重开</button>
+			<button class="action-btn return-btn" @click="handleReturn">返回</button>
 		</view>
 	</view>
 </template>
@@ -73,7 +84,12 @@ export default {
 			userId: '',
 			forgivenessChanges: [],
 			startTimestamp: 0,
-			recordSaved: false
+			recordSaved: false,
+			gameEnded: false,
+			gameResult: {
+				success: false,
+				message: ''
+			}
 		}
 	},
 	computed: {
@@ -117,13 +133,16 @@ export default {
 					return
 				}
 				this.scene = data
-				this.forgiveness = data.initial_forgiveness || 20
+				this.forgiveness = data.initial_forgiveness ?? 40
 				this.startForgiveness = this.forgiveness
 				this.maxTurns = data.max_interactions || 10
 				this.currentTurn = 0
 				this.messages = []
 				this.forgivenessChanges = []
 				this.recordSaved = false
+				this.gameEnded = false
+				this.gameResult = { success: false, message: '' }
+				this.actionLocked = false
 				this.startTimestamp = Date.now()
 				this.appendMessage('ai', data.angry_reason || data.title || '我现在很生气，你说说看。')
 			} catch (err) {
@@ -217,25 +236,26 @@ export default {
 		},
 		showResult(success, reason = '') {
 			this.actionLocked = true
+			this.gameEnded = true
 			this.persistRecord(success)
-			const title = success ? '恭喜，哄好了！' : '挑战失败'
-			const content = success
-				? `原谅值达到 100，胜利！`
-				: reason || `原谅值 ${this.forgiveness}，挑战失败`
-			uni.showModal({
-				title,
-				content,
-				confirmText: '重新挑战',
-				cancelText: '返回首页',
-				success: (res) => {
-					if (res.confirm) {
-						this.actionLocked = false
-						this.initScene()
-					} else {
-						uni.reLaunch({ url: '/pages/index/index' })
-					}
+			
+			if (success) {
+				this.gameResult = {
+					success: true,
+					message: '恭喜，哄好了！原谅值达到 100，胜利！'
 				}
-			})
+			} else {
+				this.gameResult = {
+					success: false,
+					message: reason || `挑战失败，原谅值 ${this.forgiveness}`
+				}
+			}
+		},
+		handleRestart() {
+			this.initScene()
+		},
+		handleReturn() {
+			uni.navigateBack()
 		},
 		async persistRecord(isSuccess) {
 			// 避免重复保存
@@ -329,7 +349,13 @@ export default {
 
 .chat-list {
 	flex: 1;
-	padding: 20rpx 16rpx 140rpx 16rpx;
+	padding: 20rpx 16rpx;
+	padding-bottom: 140rpx;
+}
+
+/* 游戏结束时增加底部间距，避免被横幅遮挡 */
+.chat-list.game-ended {
+	padding-bottom: 280rpx;
 }
 
 .chat-item {
@@ -389,17 +415,23 @@ export default {
 	background: #fff;
 	box-shadow: 0 -4rpx 10rpx rgba(0, 0, 0, 0.06);
 	display: flex;
-	align-items: center;
+	align-items: flex-end;
 	gap: 12rpx;
 }
 
 .text-input {
 	flex: 1;
-	height: 88rpx;
+	min-height: 88rpx;
 	background: #f5f5f5;
 	border-radius: 12rpx;
-	padding: 0 16rpx;
+	padding: 12rpx 16rpx;
 	font-size: 28rpx;
+	line-height: 42rpx;
+	box-sizing: border-box;
+}
+
+.text-input.multiline {
+	max-height: 220rpx;
 }
 
 .send-btn {
@@ -410,6 +442,73 @@ export default {
 	border-radius: 12rpx;
 	background: linear-gradient(135deg, #4f46e5, #7c3aed);
 	border: none;
+}
+
+/* 游戏结束提示 */
+.result-banner {
+	position: fixed;
+	left: 0;
+	right: 0;
+	bottom: 148rpx;
+	padding: 20rpx 24rpx;
+	background: rgba(0, 0, 0, 0.8);
+	z-index: 100;
+	text-align: center;
+}
+
+.result-banner.success {
+	background: rgba(16, 185, 129, 0.9);
+}
+
+.result-banner.failed {
+	background: rgba(239, 68, 68, 0.9);
+}
+
+.result-text {
+	font-size: 28rpx;
+	color: #fff;
+	font-weight: 500;
+}
+
+/* 操作按钮区域 */
+.action-buttons {
+	position: fixed;
+	left: 0;
+	right: 0;
+	bottom: 0;
+	padding: 20rpx 24rpx;
+	background: #fff;
+	box-shadow: 0 -4rpx 10rpx rgba(0, 0, 0, 0.06);
+	display: flex;
+	gap: 20rpx;
+	z-index: 99;
+}
+
+.action-btn {
+	flex: 1;
+	height: 88rpx;
+	line-height: 88rpx;
+	border-radius: 12rpx;
+	font-size: 30rpx;
+	border: none;
+}
+
+.restart-btn {
+	background: #4f46e5;
+	color: #fff;
+}
+
+.restart-btn:active {
+	background: #4338ca;
+}
+
+.return-btn {
+	background: #f5f5f5;
+	color: #333;
+}
+
+.return-btn:active {
+	background: #e0e0e0;
 }
 </style>
 

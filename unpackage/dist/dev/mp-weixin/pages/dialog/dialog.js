@@ -23,7 +23,12 @@ const _sfc_main = {
       userId: "",
       forgivenessChanges: [],
       startTimestamp: 0,
-      recordSaved: false
+      recordSaved: false,
+      gameEnded: false,
+      gameResult: {
+        success: false,
+        message: ""
+      }
     };
   },
   computed: {
@@ -67,17 +72,20 @@ const _sfc_main = {
           return;
         }
         this.scene = data;
-        this.forgiveness = data.initial_forgiveness || 20;
+        this.forgiveness = data.initial_forgiveness ?? 40;
         this.startForgiveness = this.forgiveness;
         this.maxTurns = data.max_interactions || 10;
         this.currentTurn = 0;
         this.messages = [];
         this.forgivenessChanges = [];
         this.recordSaved = false;
+        this.gameEnded = false;
+        this.gameResult = { success: false, message: "" };
+        this.actionLocked = false;
         this.startTimestamp = Date.now();
         this.appendMessage("ai", data.angry_reason || data.title || "我现在很生气，你说说看。");
       } catch (err) {
-        common_vendor.index.__f__("error", "at pages/dialog/dialog.vue:130", err);
+        common_vendor.index.__f__("error", "at pages/dialog/dialog.vue:149", err);
         common_vendor.index.showToast({ title: "加载失败", icon: "none" });
       } finally {
         this.loading = false;
@@ -133,7 +141,7 @@ const _sfc_main = {
         this.appendMessage("ai", reply, changeText);
         this.checkResult();
       } catch (err) {
-        common_vendor.index.__f__("error", "at pages/dialog/dialog.vue:192", "AI 处理异常:", err);
+        common_vendor.index.__f__("error", "at pages/dialog/dialog.vue:211", "AI 处理异常:", err);
         this.currentTurn = Math.max(0, this.currentTurn - 1);
         this.appendMessage("ai", "AI 暂时不能使用，请稍后再试。");
       } finally {
@@ -160,23 +168,25 @@ const _sfc_main = {
     },
     showResult(success, reason = "") {
       this.actionLocked = true;
+      this.gameEnded = true;
       this.persistRecord(success);
-      const title = success ? "恭喜，哄好了！" : "挑战失败";
-      const content = success ? `原谅值达到 100，胜利！` : reason || `原谅值 ${this.forgiveness}，挑战失败`;
-      common_vendor.index.showModal({
-        title,
-        content,
-        confirmText: "重新挑战",
-        cancelText: "返回首页",
-        success: (res) => {
-          if (res.confirm) {
-            this.actionLocked = false;
-            this.initScene();
-          } else {
-            common_vendor.index.reLaunch({ url: "/pages/index/index" });
-          }
-        }
-      });
+      if (success) {
+        this.gameResult = {
+          success: true,
+          message: "恭喜，哄好了！原谅值达到 100，胜利！"
+        };
+      } else {
+        this.gameResult = {
+          success: false,
+          message: reason || `挑战失败，原谅值 ${this.forgiveness}`
+        };
+      }
+    },
+    handleRestart() {
+      this.initScene();
+    },
+    handleReturn() {
+      common_vendor.index.navigateBack();
     },
     async persistRecord(isSuccess) {
       if (this.recordSaved)
@@ -196,7 +206,7 @@ const _sfc_main = {
           durationSeconds
         });
       } catch (err) {
-        common_vendor.index.__f__("error", "at pages/dialog/dialog.vue:262", "保存游戏记录失败:", err);
+        common_vendor.index.__f__("error", "at pages/dialog/dialog.vue:282", "保存游戏记录失败:", err);
       }
     }
   }
@@ -224,14 +234,27 @@ function _sfc_render(_ctx, _cache, $props, $setup, $data, $options) {
         g: common_vendor.n(msg.role)
       });
     }),
-    h: $data.lastMsgId,
-    i: $data.actionLocked,
-    j: common_vendor.o((...args) => $options.handleSend && $options.handleSend(...args)),
-    k: $data.inputText,
-    l: common_vendor.o(($event) => $data.inputText = $event.detail.value),
-    m: $data.actionLocked,
-    n: common_vendor.o((...args) => $options.handleSend && $options.handleSend(...args))
-  });
+    h: $data.gameEnded ? 1 : "",
+    i: $data.lastMsgId,
+    j: $data.gameEnded
+  }, $data.gameEnded ? {
+    k: common_vendor.t($data.gameResult.message),
+    l: common_vendor.n($data.gameResult.success ? "success" : "failed")
+  } : {}, {
+    m: !$data.gameEnded
+  }, !$data.gameEnded ? {
+    n: $data.actionLocked,
+    o: -1,
+    p: $data.inputText,
+    q: common_vendor.o(($event) => $data.inputText = $event.detail.value),
+    r: $data.actionLocked,
+    s: common_vendor.o((...args) => $options.handleSend && $options.handleSend(...args))
+  } : {}, {
+    t: $data.gameEnded
+  }, $data.gameEnded ? {
+    v: common_vendor.o((...args) => $options.handleRestart && $options.handleRestart(...args)),
+    w: common_vendor.o((...args) => $options.handleReturn && $options.handleReturn(...args))
+  } : {});
 }
 const MiniProgramPage = /* @__PURE__ */ common_vendor._export_sfc(_sfc_main, [["render", _sfc_render]]);
 wx.createPage(MiniProgramPage);

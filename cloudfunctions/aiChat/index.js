@@ -98,7 +98,7 @@ exports.main = async (event) => {
   const systemPrompt = [
     '你是情感对话游戏引擎，扮演场景角色。',
     '严格只输出JSON，格式：{"reply":"回复内容","forgivenessDelta":数字}',
-    '规则：forgiveness范围0-100，forgivenessDelta范围-50到+50，reply用中文1-3句。'
+    '规则：forgiveness范围0-100，forgivenessDelta范围-30到+50，reply用中文1-3句。'
   ].join('\n')
 
   const sceneBlock = [
@@ -174,7 +174,7 @@ exports.main = async (event) => {
   if (!obj) return { error: 'Kimi 未按 JSON 输出' }
 
   const reply = typeof obj.reply === 'string' ? obj.reply.trim() : ''
-  const forgivenessDelta = clampInt(obj.forgivenessDelta, -50, 30)
+  const forgivenessDelta = clampInt(obj.forgivenessDelta, -30, 50)
   if (!reply) return { error: 'reply 为空' }
 
   return { reply, forgivenessDelta }

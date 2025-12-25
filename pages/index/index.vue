@@ -286,13 +286,13 @@
 	}
 	
 	.app-container {
-		min-height: 100vh;
-		padding: 20rpx;
+	min-height: 100vh;
+	padding: 20rpx 8rpx;
 	}
 	
 	.main-content {
-		max-width: 600rpx;
-		margin: 0 auto;
+	max-width: 760rpx;
+	margin: 0 auto;
 	}
 	
 	/* 场景选择部分 */

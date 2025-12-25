@@ -80,7 +80,7 @@
 					<textarea 
 						class="textarea" 
 						v-model="formData.angryReason" 
-						placeholder="详细描述对方为什么生气，这将是游戏开始时AI的第一句话"
+						placeholder="详细描述对方为什么生气，这将是游戏开始时AI的第一句话（比如你做了什么事让对方生气，这将帮助你更容易将对方哄好）"
 						maxlength="1000"
 					/>
 				</view>
