@@ -66,12 +66,30 @@
 .chat-item.user {
 	flex-direction: row-reverse;
 }
+.avatar-wrapper {
+	position: relative;
+	margin: 0 12rpx;
+}
 .avatar {
 	width: 64rpx;
 	height: 64rpx;
 	border-radius: 50%;
-	margin: 0 12rpx;
 	background: #ddd;
+}
+.avatar-expression {
+	position: absolute;
+	bottom: -8rpx;
+	right: -4rpx;
+	font-size: 32rpx;
+	background: #fff;
+	border-radius: 50%;
+	width: 36rpx;
+	height: 36rpx;
+	display: flex;
+	align-items: center;
+	justify-content: center;
+	box-shadow: 0 2rpx 8rpx rgba(0, 0, 0, 0.15);
+	line-height: 1;
 }
 .bubble {
 	max-width: 80%;

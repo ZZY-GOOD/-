@@ -22,8 +22,14 @@ const _sfc_main = {
       // 已选择的头像
       showNameInput: false,
       inputName: "",
-      loginType: "guest"
+      loginType: "guest",
       // 登录类型：wx 或 guest
+      showWxLoginModal: false,
+      // 微信一键登录弹窗
+      tempAvatar: "",
+      // 临时头像（选择后）
+      tempNickname: ""
+      // 临时昵称（输入后）
     };
   },
   onShow() {
@@ -33,6 +39,26 @@ const _sfc_main = {
     if (!this.userId || !this.nickname || !this.avatar) {
       this.promptLogin();
     }
+  },
+  onShareAppMessage() {
+    const stats = this.stats;
+    const shareTitle = stats.totalGames > 0 ? `我的挑战数据：总挑战${stats.totalGames}次，成功率${stats.successRate}%！来挑战吧！` : "哄一哄他（她）- AI情感对话游戏，挑战你的沟通技巧！";
+    return {
+      title: shareTitle,
+      path: "/pages/index/index",
+      imageUrl: ""
+      // 可选：分享图片，建议尺寸 5:4
+    };
+  },
+  onShareTimeline() {
+    const stats = this.stats;
+    const shareTitle = stats.totalGames > 0 ? `我的挑战数据：总挑战${stats.totalGames}次，成功率${stats.successRate}%！来挑战吧！` : "哄一哄他（她）- AI情感对话游戏，挑战你的沟通技巧！";
+    return {
+      title: shareTitle,
+      query: "",
+      imageUrl: ""
+      // 可选：分享图片，建议尺寸 1:1（500x500px）
+    };
   },
   methods: {
     loadUser() {
@@ -64,10 +90,10 @@ const _sfc_main = {
           wxOpenid: extra.wxOpenid || this.wxOpenid || null
         });
         if (error) {
-          common_vendor.index.__f__("error", "at pages/profile/profile.vue:170", "保存用户信息到数据库失败:", error);
+          common_vendor.index.__f__("error", "at pages/profile/profile.vue:237", "保存用户信息到数据库失败:", error);
         }
       } catch (err) {
-        common_vendor.index.__f__("error", "at pages/profile/profile.vue:174", "保存用户信息异常:", err);
+        common_vendor.index.__f__("error", "at pages/profile/profile.vue:241", "保存用户信息异常:", err);
       }
       common_vendor.index.showToast({ title: "已保存", icon: "success" });
     },
@@ -79,14 +105,17 @@ const _sfc_main = {
     promptLogin() {
       this.bottomSheetTitle = "选择登录方式";
       this.bottomSheetOptions = [
-        { text: "微信授权登录", type: "wx" },
+        { text: "微信一键登录", type: "wx-new" },
         { text: "手动填写", type: "manual" }
       ];
       this.showBottomSheet = true;
     },
     handleBottomOption(index) {
       const option = this.bottomSheetOptions[index];
-      if (option.type === "wx") {
+      if (option.type === "wx-new") {
+        this.closeBottomSheet();
+        this.showWxLoginModal = true;
+      } else if (option.type === "wx") {
         this.wxAuthorize();
         this.closeBottomSheet();
       } else if (option.type === "manual") {
@@ -137,7 +166,7 @@ const _sfc_main = {
         this.closeBottomSheet();
         common_vendor.index.showToast({ title: "登录成功", icon: "success" });
       } catch (err) {
-        common_vendor.index.__f__("error", "at pages/profile/profile.vue:255", "微信授权失败", err);
+        common_vendor.index.__f__("error", "at pages/profile/profile.vue:327", "微信授权失败", err);
         common_vendor.index.showToast({
           title: (err == null ? void 0 : err.errMsg) || "授权失败",
           icon: "none"
@@ -177,7 +206,7 @@ const _sfc_main = {
         common_vendor.index.setStorageSync("wxOpenid", openid);
         return openid;
       } catch (err) {
-        common_vendor.index.__f__("warn", "at pages/profile/profile.vue:297", "获取 openid 失败，回退 guest：", err);
+        common_vendor.index.__f__("warn", "at pages/profile/profile.vue:369", "获取 openid 失败，回退 guest：", err);
         this.loginType = "guest";
         return null;
       }
@@ -210,6 +239,49 @@ const _sfc_main = {
           }
         }
       });
+    },
+    // 微信一键登录相关方法
+    onChooseAvatar(e) {
+      const { avatarUrl } = e.detail;
+      if (avatarUrl) {
+        this.tempAvatar = avatarUrl;
+      }
+    },
+    closeWxLoginModal() {
+      this.showWxLoginModal = false;
+      this.tempAvatar = "";
+      this.tempNickname = "";
+    },
+    async confirmWxLogin() {
+      if (!this.tempNickname || !this.tempNickname.trim()) {
+        common_vendor.index.showToast({ title: "请输入昵称", icon: "none" });
+        return;
+      }
+      if (!this.tempAvatar) {
+        common_vendor.index.showToast({ title: "请选择头像", icon: "none" });
+        return;
+      }
+      try {
+        const openid = await this.getWxOpenid();
+        if (!openid) {
+          common_vendor.index.showToast({ title: "获取用户信息失败", icon: "none" });
+          return;
+        }
+        this.wxOpenid = openid;
+        this.userId = openid;
+        this.nickname = this.tempNickname.trim();
+        this.avatar = this.tempAvatar;
+        this.loginType = "wx";
+        await this.saveUser({ wxOpenid: openid });
+        this.closeWxLoginModal();
+        common_vendor.index.showToast({ title: "登录成功", icon: "success" });
+      } catch (err) {
+        common_vendor.index.__f__("error", "at pages/profile/profile.vue:455", "微信一键登录失败:", err);
+        common_vendor.index.showToast({
+          title: (err == null ? void 0 : err.message) || "登录失败，请重试",
+          icon: "none"
+        });
+      }
     },
     closeNameInput() {
       this.showNameInput = false;
@@ -349,8 +421,24 @@ function _sfc_render(_ctx, _cache, $props, $setup, $data, $options) {
     v: common_vendor.o(() => {
     }),
     w: common_vendor.o((...args) => $options.closeNameInput && $options.closeNameInput(...args))
-  } : {});
+  } : {}, {
+    x: $data.showWxLoginModal
+  }, $data.showWxLoginModal ? common_vendor.e({
+    y: $data.tempAvatar
+  }, $data.tempAvatar ? {
+    z: $data.tempAvatar
+  } : {}, {
+    A: common_vendor.o((...args) => $options.onChooseAvatar && $options.onChooseAvatar(...args)),
+    B: $data.tempNickname,
+    C: common_vendor.o(($event) => $data.tempNickname = $event.detail.value),
+    D: common_vendor.o((...args) => $options.closeWxLoginModal && $options.closeWxLoginModal(...args)),
+    E: common_vendor.o((...args) => $options.confirmWxLogin && $options.confirmWxLogin(...args)),
+    F: common_vendor.o(() => {
+    }),
+    G: common_vendor.o((...args) => $options.closeWxLoginModal && $options.closeWxLoginModal(...args))
+  }) : {});
 }
 const MiniProgramPage = /* @__PURE__ */ common_vendor._export_sfc(_sfc_main, [["render", _sfc_render]]);
+_sfc_main.__runtimeHooks = 6;
 wx.createPage(MiniProgramPage);
 //# sourceMappingURL=../../../.sourcemap/mp-weixin/pages/profile/profile.js.map

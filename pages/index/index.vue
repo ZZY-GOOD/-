@@ -4,16 +4,6 @@
 		<view class="main-content">
 			<!-- 场景选择部分 -->
 			<view class="scene-section">
-				<!-- 测试按钮 -->
-				<view class="test-section">
-					<button class="test-btn" @click="testSupabaseConnection" :loading="testing">
-						{{ testing ? '测试中...' : '🔍 测试数据库连接' }}
-					</button>
-					<view v-if="testResult" class="test-result" :class="testResult.type">
-						{{ testResult.message }}
-					</view>
-				</view>
-				
 			<!-- 欢迎描述 -->
 			<view class="welcome-card">
 				<text class="welcome-title">欢迎来到哄一哄他（她）</text>
@@ -74,20 +64,33 @@
 				categories: [],
 				activeCategory: '全部',
 				scenes: [],
-				testing: false,
-				testResult: null,
 				loadingScenes: false
 			}
 		},
 		onLoad() {
 			this.loadScenes()
-			// 可以自动测试一次（可选）
-			// this.testSupabaseConnection()
 		},
-		onShow() {
-			// 每次返回首页时刷新场景统计数据（挑战次数、胜率）
-			this.loadScenes()
-		},
+	onShow() {
+		// 每次返回首页时刷新场景统计数据（挑战次数、胜率）
+		this.loadScenes()
+		this.checkLoginAtStartup()
+	},
+	// #ifdef MP-WEIXIN
+	onShareAppMessage() {
+		return {
+			title: '哄一哄他（她）- AI情感对话游戏，挑战你的沟通技巧！',
+			path: '/pages/index/index',
+			imageUrl: '' // 可选：分享图片，建议尺寸 5:4
+		}
+	},
+	onShareTimeline() {
+		return {
+			title: '哄一哄他（她）- AI情感对话游戏，挑战你的沟通技巧！',
+			query: '',
+			imageUrl: '' // 可选：分享图片，建议尺寸 1:1（500x500px）
+		}
+	},
+	// #endif
 		computed: {
 			// 过滤并排序场景列表（支持多分类）
 			filteredScenes() {
@@ -113,6 +116,16 @@
 			}
 		},
 		methods: {
+			// 进入首页时检查是否已登录，如果未登录则跳转到个人中心触发登录弹窗
+			checkLoginAtStartup() {
+				const userId = uni.getStorageSync('userId') || ''
+				const userName = uni.getStorageSync('userName') || ''
+				const userAvatar = uni.getStorageSync('userAvatar') || ''
+				// 没有任何用户信息时，引导到个人中心登录
+				if (!userId && !userName && !userAvatar) {
+					uni.switchTab({ url: '/pages/profile/profile' })
+				}
+			},
 			// 从数据库加载场景
 			async loadScenes() {
 				this.loadingScenes = true
@@ -182,72 +195,6 @@
 					})
 				} finally {
 					this.loadingScenes = false
-				}
-			},
-
-			// 测试 Supabase 数据库连接
-			async testSupabaseConnection() {
-				this.testing = true
-				this.testResult = null
-				
-				try {
-					console.log('开始测试 Supabase 连接...')
-					
-					// 测试1: 获取场景列表
-					const { data, error } = await sceneService.getAllScenes({
-						status: 'active',
-						limit: 100
-					})
-					
-					if (error) {
-						console.error('数据库连接失败:', error)
-						this.testResult = {
-							type: 'error',
-							message: `❌ 连接失败: ${error.message || error}`
-						}
-						uni.showToast({
-							title: '连接失败',
-							icon: 'none',
-							duration: 3000
-						})
-						return
-					}
-					
-					// 测试成功
-					const sceneCount = data ? data.length : 0
-					console.log('✅ 连接成功！找到', sceneCount, '个场景')
-					
-					this.testResult = {
-						type: 'success',
-						message: `✅ 连接成功！找到 ${sceneCount} 个场景`
-					}
-					
-					uni.showToast({
-						title: `连接成功，找到 ${sceneCount} 个场景`,
-						icon: 'success',
-						duration: 2000
-					})
-					
-					// 如果有数据，可以更新本地场景列表
-					if (data && data.length > 0) {
-						console.log('场景数据:', data)
-						// 这里可以将数据库的场景数据更新到本地
-						// this.loadScenesFromDatabase(data)
-					}
-					
-				} catch (err) {
-					console.error('测试异常:', err)
-					this.testResult = {
-						type: 'error',
-						message: `❌ 测试异常: ${err.message || '未知错误'}`
-					}
-					uni.showToast({
-						title: '测试异常',
-						icon: 'none',
-						duration: 3000
-					})
-				} finally {
-					this.testing = false
 				}
 			},
 			
@@ -406,47 +353,5 @@
 		color: #666;
 		line-height: 40rpx;
 		display: block;
-	}
-	
-	/* 测试区域 */
-	.test-section {
-		margin-bottom: 30rpx;
-		padding: 20rpx;
-		background-color: #f8f9fa;
-		border-radius: 10rpx;
-	}
-	
-	.test-btn {
-		width: 100%;
-		padding: 20rpx;
-		background-color: #007aff;
-		color: #fff;
-		border-radius: 10rpx;
-		font-size: 28rpx;
-		border: none;
-	}
-	
-	.test-btn:active {
-		background-color: #0056b3;
-	}
-	
-	.test-result {
-		margin-top: 20rpx;
-		padding: 15rpx;
-		border-radius: 8rpx;
-		font-size: 24rpx;
-		line-height: 36rpx;
-	}
-	
-	.test-result.success {
-		background-color: #d4edda;
-		color: #155724;
-		border: 1px solid #c3e6cb;
-	}
-	
-	.test-result.error {
-		background-color: #f8d7da;
-		color: #721c24;
-		border: 1px solid #f5c6cb;
 	}
 </style>

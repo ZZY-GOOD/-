@@ -27,7 +27,10 @@
 				class="chat-item"
 				:class="msg.role"
 			>
-				<image class="avatar" :src="msg.role === 'ai' ? aiAvatar : userAvatar" mode="aspectFill" />
+				<view class="avatar-wrapper">
+					<image class="avatar" :src="msg.role === 'ai' ? getAiAvatar(msg.forgiveness) : userAvatar" mode="aspectFill" />
+					<text v-if="msg.role === 'ai'" class="avatar-expression">{{ getExpression(msg.forgiveness) }}</text>
+				</view>
 				<view class="bubble">
 					<text class="msg-text">{{ msg.text }}</text>
 					<text v-if="msg.forgivenessChange" class="forgive-change">{{ msg.forgivenessChange }}</text>
@@ -107,7 +110,62 @@ export default {
 		this.loadUser()
 		this.initScene()
 	},
+	// #ifdef MP-WEIXIN
+	onShareAppMessage() {
+		const sceneTitle = this.scene?.title || '哄一哄他（她）'
+		const shareTitle = this.gameEnded
+			? `${sceneTitle} - ${this.gameResult.success ? '挑战成功！' : '挑战失败，来试试吧！'}`
+			: `${sceneTitle} - 来挑战这个场景吧！`
+		
+		return {
+			title: shareTitle,
+			path: `/pages/dialog/dialog?id=${this.sceneId}`,
+			imageUrl: '' // 可选：分享图片，建议尺寸 5:4
+		}
+	},
+	onShareTimeline() {
+		const sceneTitle = this.scene?.title || '哄一哄他（她）'
+		const shareTitle = this.gameEnded
+			? `${sceneTitle} - ${this.gameResult.success ? '挑战成功！' : '挑战失败，来试试吧！'}`
+			: `${sceneTitle} - 来挑战这个场景吧！`
+		
+		return {
+			title: shareTitle,
+			query: `id=${this.sceneId}`,
+			imageUrl: '' // 可选：分享图片，建议尺寸 1:1（500x500px）
+		}
+	},
+	// #endif
 	methods: {
+		// 根据原谅值获取表情emoji
+		getExpression(forgiveness) {
+			const val = forgiveness !== undefined ? forgiveness : this.forgiveness
+			if (val <= 30) return '😠' // 生气
+			if (val <= 50) return '😑' // 中性/不开心
+			if (val <= 70) return '😐' // 平静
+			if (val <= 85) return '😊' // 微笑
+			return '😄' // 开心
+		},
+		// 根据原谅值获取通用场景头像（不区分具体人物，只看情绪）
+		getAiAvatar(forgiveness) {
+			// 当前原谅值（优先使用消息里的值）
+			const val = forgiveness !== undefined && forgiveness !== null ? forgiveness : this.forgiveness
+
+			// 基于原谅值划分情绪阶段
+			let mood = 'angry' // 生气
+			if (val > 30 && val <= 60) mood = 'normal'   // 一般
+			else if (val > 60 && val <= 85) mood = 'smile' // 微笑
+			else if (val > 85) mood = 'happy'             // 很开心
+
+			// 通用头像命名规则（不区分人物，只区分情绪）：
+			// 需要在 static/avatars 下准备 4 张通用 GIF 头像：
+			// /static/avatars/role_angry.gif   （生气）
+			// /static/avatars/role_normal.gif  （一般/平静）
+			// /static/avatars/role_smile.gif   （微笑）
+			// /static/avatars/role_happy.gif   （很开心）
+			// 如果没有对应图片，微信只是不显示，不会影响逻辑
+			return `/static/avatars/role_${mood}.gif`
+		},
 		loadUser() {
 			const storedAvatar = uni.getStorageSync('userAvatar')
 			if (storedAvatar) {
@@ -144,7 +202,8 @@ export default {
 				this.gameResult = { success: false, message: '' }
 				this.actionLocked = false
 				this.startTimestamp = Date.now()
-				this.appendMessage('ai', data.angry_reason || data.title || '我现在很生气，你说说看。')
+				// 初始消息使用初始原谅值
+				this.appendMessage('ai', data.angry_reason || data.title || '我现在很生气，你说说看。', '', this.forgiveness)
 			} catch (err) {
 				console.error(err)
 				uni.showToast({ title: '加载失败', icon: 'none' })
@@ -152,9 +211,17 @@ export default {
 				this.loading = false
 			}
 		},
-		appendMessage(role, text, forgivenessChange = '') {
+		appendMessage(role, text, forgivenessChange = '', forgiveness = null) {
 			const id = `msg-${Date.now()}-${Math.random().toString(16).slice(2)}`
-			this.messages.push({ id, role, text, forgivenessChange })
+			// 保存当前原谅值，用于显示表情
+			const currentForgiveness = forgiveness !== null ? forgiveness : this.forgiveness
+			this.messages.push({ 
+				id, 
+				role, 
+				text, 
+				forgivenessChange,
+				forgiveness: currentForgiveness // 保存消息发送时的原谅值
+			})
 			this.lastMsgId = id
 		},
 		async handleSend() {
@@ -205,7 +272,8 @@ export default {
 					final: this.forgiveness
 				})
 				const changeText = delta >= 0 ? `原谅值 +${delta}` : `原谅值 ${delta}`
-				this.appendMessage('ai', reply, changeText)
+				// 传递更新后的原谅值，用于显示表情
+				this.appendMessage('ai', reply, changeText, this.forgiveness)
 				this.checkResult()
 			} catch (err) {
 				console.error('AI 处理异常:', err)
@@ -244,12 +312,12 @@ export default {
 					success: true,
 					message: '恭喜，哄好了！原谅值达到 100，胜利！'
 				}
-			} else {
+					} else {
 				this.gameResult = {
 					success: false,
 					message: reason || `挑战失败，原谅值 ${this.forgiveness}`
+					}
 				}
-			}
 		},
 		handleRestart() {
 			this.initScene()
@@ -367,12 +435,32 @@ export default {
 	flex-direction: row-reverse;
 }
 
+.avatar-wrapper {
+	position: relative;
+	margin: 0 12rpx;
+}
+
 .avatar {
 	width: 64rpx;
 	height: 64rpx;
 	border-radius: 50%;
-	margin: 0 12rpx;
 	background: #ddd;
+}
+
+.avatar-expression {
+	position: absolute;
+	bottom: -8rpx;
+	right: -4rpx;
+	font-size: 32rpx;
+	background: #fff;
+	border-radius: 50%;
+	width: 36rpx;
+	height: 36rpx;
+	display: flex;
+	align-items: center;
+	justify-content: center;
+	box-shadow: 0 2rpx 8rpx rgba(0, 0, 0, 0.15);
+	line-height: 1;
 }
 
 .bubble {

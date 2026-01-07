@@ -95,6 +95,44 @@
 			</view>
 		</view>
 
+		<!-- 微信一键登录弹窗（使用新组件方式） -->
+		<view v-if="showWxLoginModal" class="modal-mask" @click="closeWxLoginModal">
+			<view class="modal wx-login-modal" @click.stop>
+				<view class="modal-title">微信一键登录</view>
+				<view class="wx-login-content">
+					<!-- 选择头像 -->
+					<view class="wx-login-item">
+						<text class="wx-login-label">选择头像</text>
+						<!-- #ifdef MP-WEIXIN -->
+						<button class="wx-avatar-btn" open-type="chooseAvatar" @chooseavatar="onChooseAvatar">
+							<image v-if="tempAvatar" class="wx-avatar-preview" :src="tempAvatar" mode="aspectFill" />
+							<view v-else class="wx-avatar-placeholder">
+								<text>点击选择头像</text>
+							</view>
+						</button>
+						<!-- #endif -->
+					</view>
+					<!-- 输入昵称 -->
+					<view class="wx-login-item">
+						<text class="wx-login-label">输入昵称</text>
+						<!-- #ifdef MP-WEIXIN -->
+						<input 
+							class="wx-nickname-input" 
+							type="nickname" 
+							v-model="tempNickname" 
+							placeholder="请输入昵称"
+							maxlength="20"
+						/>
+						<!-- #endif -->
+					</view>
+				</view>
+				<view class="modal-actions">
+					<button size="mini" @click="closeWxLoginModal">取消</button>
+					<button size="mini" type="primary" @click="confirmWxLogin">确认登录</button>
+				</view>
+			</view>
+		</view>
+
 		<view class="bottom-space" />
 	</view>
 </template>
@@ -122,7 +160,10 @@ export default {
 			selectedAvatar: '', // 已选择的头像
 			showNameInput: false,
 			inputName: '',
-			loginType: 'guest' // 登录类型：wx 或 guest
+			loginType: 'guest', // 登录类型：wx 或 guest
+			showWxLoginModal: false, // 微信一键登录弹窗
+			tempAvatar: '', // 临时头像（选择后）
+			tempNickname: '' // 临时昵称（输入后）
 			}
 		},
 	onShow() {
@@ -133,6 +174,32 @@ export default {
 			this.promptLogin()
 		}
 	},
+	// #ifdef MP-WEIXIN
+	onShareAppMessage() {
+		const stats = this.stats
+		const shareTitle = stats.totalGames > 0
+			? `我的挑战数据：总挑战${stats.totalGames}次，成功率${stats.successRate}%！来挑战吧！`
+			: '哄一哄他（她）- AI情感对话游戏，挑战你的沟通技巧！'
+		
+		return {
+			title: shareTitle,
+			path: '/pages/index/index',
+			imageUrl: '' // 可选：分享图片，建议尺寸 5:4
+		}
+	},
+	onShareTimeline() {
+		const stats = this.stats
+		const shareTitle = stats.totalGames > 0
+			? `我的挑战数据：总挑战${stats.totalGames}次，成功率${stats.successRate}%！来挑战吧！`
+			: '哄一哄他（她）- AI情感对话游戏，挑战你的沟通技巧！'
+		
+		return {
+			title: shareTitle,
+			query: '',
+			imageUrl: '' // 可选：分享图片，建议尺寸 1:1（500x500px）
+		}
+	},
+	// #endif
 	methods: {
 		loadUser() {
 			const storedId = uni.getStorageSync('userId') || ''
@@ -184,14 +251,19 @@ export default {
 		promptLogin() {
 			this.bottomSheetTitle = '选择登录方式'
 			this.bottomSheetOptions = [
-				{ text: '微信授权登录', type: 'wx' },
+				{ text: '微信一键登录', type: 'wx-new' },
 				{ text: '手动填写', type: 'manual' }
 			]
 			this.showBottomSheet = true
 		},
 		handleBottomOption(index) {
 			const option = this.bottomSheetOptions[index]
-			if (option.type === 'wx') {
+			if (option.type === 'wx-new') {
+				// 使用新的组件方式登录
+				this.closeBottomSheet()
+				this.showWxLoginModal = true
+			} else if (option.type === 'wx') {
+				// 旧的 getUserProfile 方式（已废弃，保留兼容）
 				this.wxAuthorize()
 				this.closeBottomSheet()
 			} else if (option.type === 'manual') {
@@ -233,8 +305,8 @@ export default {
 		async wxAuthorizeAndBind() {
 			try {
 				const profile = await new Promise((resolve, reject) => {
-					uni.getUserProfile({
-						desc: '用于完善个人资料',
+			uni.getUserProfile({
+				desc: '用于完善个人资料',
 						success: (res) => resolve(res.userInfo || {}),
 						fail: reject
 					})
@@ -246,18 +318,18 @@ export default {
 				this.userId = openid
 				this.nickname = profile.nickName || this.nickname
 				this.avatar = profile.avatarUrl || this.avatar
-				this.loginType = 'wx'
+						this.loginType = 'wx'
 
 				await this.saveUser({ wxOpenid: openid })
-				this.closeBottomSheet()
+						this.closeBottomSheet()
 				uni.showToast({ title: '登录成功', icon: 'success' })
 			} catch (err) {
 				console.error('微信授权失败', err)
-				uni.showToast({
+					uni.showToast({
 					title: err?.errMsg || '授权失败',
-					icon: 'none'
-				})
-			}
+						icon: 'none'
+					})
+				}
 		},
 		// 调用云函数 login 获取 openid
 		getWxOpenid() {
@@ -275,11 +347,11 @@ export default {
 						else reject(new Error('未获取到 openid'))
 					},
 					fail: reject
-				})
-				// #endif
-				// #ifndef MP-WEIXIN
+			})
+			// #endif
+			// #ifndef MP-WEIXIN
 				reject(new Error('仅支持微信小程序'))
-				// #endif
+			// #endif
 			})
 		},
 		// 确保拿到 openid；拿不到时回退为 guest
@@ -320,7 +392,7 @@ export default {
 								this.userId = openid
 								this.loginType = 'wx'
 							} else {
-								this.loginType = 'guest'
+							this.loginType = 'guest'
 							}
 							await this.saveUser({ wxOpenid: openid || null })
 							this.closeBottomSheet()
@@ -331,6 +403,62 @@ export default {
 					}
 				}
 			})
+		},
+		// 微信一键登录相关方法
+		onChooseAvatar(e) {
+			// #ifdef MP-WEIXIN
+			const { avatarUrl } = e.detail
+			if (avatarUrl) {
+				this.tempAvatar = avatarUrl
+			}
+			// #endif
+		},
+		closeWxLoginModal() {
+			this.showWxLoginModal = false
+			this.tempAvatar = ''
+			this.tempNickname = ''
+		},
+		async confirmWxLogin() {
+			// #ifdef MP-WEIXIN
+			if (!this.tempNickname || !this.tempNickname.trim()) {
+				uni.showToast({ title: '请输入昵称', icon: 'none' })
+				return
+			}
+			
+			if (!this.tempAvatar) {
+				uni.showToast({ title: '请选择头像', icon: 'none' })
+				return
+			}
+			
+			try {
+				// 1. 获取 openid
+				const openid = await this.getWxOpenid()
+				if (!openid) {
+					uni.showToast({ title: '获取用户信息失败', icon: 'none' })
+					return
+				}
+				
+				// 2. 设置用户信息
+				this.wxOpenid = openid
+				this.userId = openid
+				this.nickname = this.tempNickname.trim()
+				this.avatar = this.tempAvatar
+				this.loginType = 'wx'
+				
+				// 3. 保存到数据库和本地存储
+				await this.saveUser({ wxOpenid: openid })
+				
+				// 4. 关闭弹窗
+				this.closeWxLoginModal()
+				uni.showToast({ title: '登录成功', icon: 'success' })
+			} catch (err) {
+				console.error('微信一键登录失败:', err)
+				uni.showToast({
+					title: err?.message || '登录失败，请重试',
+					icon: 'none'
+				})
+			}
+			// #endif
 		},
 		closeNameInput() {
 			this.showNameInput = false
@@ -348,7 +476,7 @@ export default {
 				this.userId = openid
 				this.loginType = 'wx'
 			} else {
-				this.loginType = 'guest'
+			this.loginType = 'guest'
 			}
 			// 如果头像也有了，自动保存
 			if (this.selectedAvatar) {
@@ -740,6 +868,67 @@ export default {
 	display: flex;
 	gap: 20rpx;
 	justify-content: flex-end;
+}
+
+/* 微信一键登录弹窗样式 */
+.wx-login-modal {
+	min-width: 600rpx;
+}
+
+.wx-login-content {
+	padding: 20rpx 0;
+}
+
+.wx-login-item {
+	margin-bottom: 30rpx;
+}
+
+.wx-login-label {
+	font-size: 28rpx;
+	color: #333;
+	font-weight: 500;
+	display: block;
+	margin-bottom: 16rpx;
+}
+
+.wx-avatar-btn {
+	width: 100%;
+	height: 200rpx;
+	padding: 0;
+	background: #f5f5f5;
+	border: 2rpx dashed #ddd;
+	border-radius: 12rpx;
+	display: flex;
+	align-items: center;
+	justify-content: center;
+	position: relative;
+	overflow: hidden;
+}
+
+.wx-avatar-btn::after {
+	border: none;
+}
+
+.wx-avatar-preview {
+	width: 100%;
+	height: 100%;
+	border-radius: 10rpx;
+}
+
+.wx-avatar-placeholder {
+	font-size: 26rpx;
+	color: #999;
+}
+
+.wx-nickname-input {
+	width: 100%;
+	height: 88rpx;
+	background: #f5f5f5;
+	border-radius: 12rpx;
+	padding: 0 24rpx;
+	font-size: 28rpx;
+	color: #333;
+	box-sizing: border-box;
 }
 </style>
 

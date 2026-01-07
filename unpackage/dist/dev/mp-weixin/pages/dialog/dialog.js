@@ -46,7 +46,54 @@ const _sfc_main = {
     this.loadUser();
     this.initScene();
   },
+  onShareAppMessage() {
+    var _a;
+    const sceneTitle = ((_a = this.scene) == null ? void 0 : _a.title) || "哄一哄他（她）";
+    const shareTitle = this.gameEnded ? `${sceneTitle} - ${this.gameResult.success ? "挑战成功！" : "挑战失败，来试试吧！"}` : `${sceneTitle} - 来挑战这个场景吧！`;
+    return {
+      title: shareTitle,
+      path: `/pages/dialog/dialog?id=${this.sceneId}`,
+      imageUrl: ""
+      // 可选：分享图片，建议尺寸 5:4
+    };
+  },
+  onShareTimeline() {
+    var _a;
+    const sceneTitle = ((_a = this.scene) == null ? void 0 : _a.title) || "哄一哄他（她）";
+    const shareTitle = this.gameEnded ? `${sceneTitle} - ${this.gameResult.success ? "挑战成功！" : "挑战失败，来试试吧！"}` : `${sceneTitle} - 来挑战这个场景吧！`;
+    return {
+      title: shareTitle,
+      query: `id=${this.sceneId}`,
+      imageUrl: ""
+      // 可选：分享图片，建议尺寸 1:1（500x500px）
+    };
+  },
   methods: {
+    // 根据原谅值获取表情emoji
+    getExpression(forgiveness) {
+      const val = forgiveness !== void 0 ? forgiveness : this.forgiveness;
+      if (val <= 30)
+        return "😠";
+      if (val <= 50)
+        return "😑";
+      if (val <= 70)
+        return "😐";
+      if (val <= 85)
+        return "😊";
+      return "😄";
+    },
+    // 根据原谅值获取通用场景头像（不区分具体人物，只看情绪）
+    getAiAvatar(forgiveness) {
+      const val = forgiveness !== void 0 && forgiveness !== null ? forgiveness : this.forgiveness;
+      let mood = "angry";
+      if (val > 30 && val <= 60)
+        mood = "normal";
+      else if (val > 60 && val <= 85)
+        mood = "smile";
+      else if (val > 85)
+        mood = "happy";
+      return `/static/avatars/role_${mood}.gif`;
+    },
     loadUser() {
       const storedAvatar = common_vendor.index.getStorageSync("userAvatar");
       if (storedAvatar) {
@@ -83,17 +130,25 @@ const _sfc_main = {
         this.gameResult = { success: false, message: "" };
         this.actionLocked = false;
         this.startTimestamp = Date.now();
-        this.appendMessage("ai", data.angry_reason || data.title || "我现在很生气，你说说看。");
+        this.appendMessage("ai", data.angry_reason || data.title || "我现在很生气，你说说看。", "", this.forgiveness);
       } catch (err) {
-        common_vendor.index.__f__("error", "at pages/dialog/dialog.vue:149", err);
+        common_vendor.index.__f__("error", "at pages/dialog/dialog.vue:208", err);
         common_vendor.index.showToast({ title: "加载失败", icon: "none" });
       } finally {
         this.loading = false;
       }
     },
-    appendMessage(role, text, forgivenessChange = "") {
+    appendMessage(role, text, forgivenessChange = "", forgiveness = null) {
       const id = `msg-${Date.now()}-${Math.random().toString(16).slice(2)}`;
-      this.messages.push({ id, role, text, forgivenessChange });
+      const currentForgiveness = forgiveness !== null ? forgiveness : this.forgiveness;
+      this.messages.push({
+        id,
+        role,
+        text,
+        forgivenessChange,
+        forgiveness: currentForgiveness
+        // 保存消息发送时的原谅值
+      });
       this.lastMsgId = id;
     },
     async handleSend() {
@@ -138,10 +193,10 @@ const _sfc_main = {
           final: this.forgiveness
         });
         const changeText = delta >= 0 ? `原谅值 +${delta}` : `原谅值 ${delta}`;
-        this.appendMessage("ai", reply, changeText);
+        this.appendMessage("ai", reply, changeText, this.forgiveness);
         this.checkResult();
       } catch (err) {
-        common_vendor.index.__f__("error", "at pages/dialog/dialog.vue:211", "AI 处理异常:", err);
+        common_vendor.index.__f__("error", "at pages/dialog/dialog.vue:279", "AI 处理异常:", err);
         this.currentTurn = Math.max(0, this.currentTurn - 1);
         this.appendMessage("ai", "AI 暂时不能使用，请稍后再试。");
       } finally {
@@ -206,7 +261,7 @@ const _sfc_main = {
           durationSeconds
         });
       } catch (err) {
-        common_vendor.index.__f__("error", "at pages/dialog/dialog.vue:282", "保存游戏记录失败:", err);
+        common_vendor.index.__f__("error", "at pages/dialog/dialog.vue:350", "保存游戏记录失败:", err);
       }
     }
   }
@@ -223,15 +278,19 @@ function _sfc_render(_ctx, _cache, $props, $setup, $data, $options) {
   } : {}, {
     g: common_vendor.f($data.messages, (msg, idx, i0) => {
       return common_vendor.e({
-        a: msg.role === "ai" ? $data.aiAvatar : $data.userAvatar,
-        b: common_vendor.t(msg.text),
-        c: msg.forgivenessChange
-      }, msg.forgivenessChange ? {
-        d: common_vendor.t(msg.forgivenessChange)
+        a: msg.role === "ai" ? $options.getAiAvatar(msg.forgiveness) : $data.userAvatar,
+        b: msg.role === "ai"
+      }, msg.role === "ai" ? {
+        c: common_vendor.t($options.getExpression(msg.forgiveness))
       } : {}, {
-        e: msg.id,
-        f: msg.id,
-        g: common_vendor.n(msg.role)
+        d: common_vendor.t(msg.text),
+        e: msg.forgivenessChange
+      }, msg.forgivenessChange ? {
+        f: common_vendor.t(msg.forgivenessChange)
+      } : {}, {
+        g: msg.id,
+        h: msg.id,
+        i: common_vendor.n(msg.role)
       });
     }),
     h: $data.gameEnded ? 1 : "",
@@ -257,5 +316,6 @@ function _sfc_render(_ctx, _cache, $props, $setup, $data, $options) {
   } : {});
 }
 const MiniProgramPage = /* @__PURE__ */ common_vendor._export_sfc(_sfc_main, [["render", _sfc_render]]);
+_sfc_main.__runtimeHooks = 6;
 wx.createPage(MiniProgramPage);
 //# sourceMappingURL=../../../.sourcemap/mp-weixin/pages/dialog/dialog.js.map

@@ -10,8 +10,6 @@ const _sfc_main = {
       categories: [],
       activeCategory: "全部",
       scenes: [],
-      testing: false,
-      testResult: null,
       loadingScenes: false
     };
   },
@@ -20,6 +18,23 @@ const _sfc_main = {
   },
   onShow() {
     this.loadScenes();
+    this.checkLoginAtStartup();
+  },
+  onShareAppMessage() {
+    return {
+      title: "哄一哄他（她）- AI情感对话游戏，挑战你的沟通技巧！",
+      path: "/pages/index/index",
+      imageUrl: ""
+      // 可选：分享图片，建议尺寸 5:4
+    };
+  },
+  onShareTimeline() {
+    return {
+      title: "哄一哄他（她）- AI情感对话游戏，挑战你的沟通技巧！",
+      query: "",
+      imageUrl: ""
+      // 可选：分享图片，建议尺寸 1:1（500x500px）
+    };
   },
   computed: {
     // 过滤并排序场景列表（支持多分类）
@@ -42,6 +57,15 @@ const _sfc_main = {
     }
   },
   methods: {
+    // 进入首页时检查是否已登录，如果未登录则跳转到个人中心触发登录弹窗
+    checkLoginAtStartup() {
+      const userId = common_vendor.index.getStorageSync("userId") || "";
+      const userName = common_vendor.index.getStorageSync("userName") || "";
+      const userAvatar = common_vendor.index.getStorageSync("userAvatar") || "";
+      if (!userId && !userName && !userAvatar) {
+        common_vendor.index.switchTab({ url: "/pages/profile/profile" });
+      }
+    },
     // 从数据库加载场景
     async loadScenes() {
       this.loadingScenes = true;
@@ -53,7 +77,7 @@ const _sfc_main = {
           order: "desc"
         });
         if (error) {
-          common_vendor.index.__f__("error", "at pages/index/index.vue:127", "加载场景失败:", error);
+          common_vendor.index.__f__("error", "at pages/index/index.vue:140", "加载场景失败:", error);
           common_vendor.index.showToast({
             title: "加载场景失败",
             icon: "none"
@@ -95,65 +119,13 @@ const _sfc_main = {
         );
         this.activeCategory = "全部";
       } catch (err) {
-        common_vendor.index.__f__("error", "at pages/index/index.vue:178", "加载场景异常:", err);
+        common_vendor.index.__f__("error", "at pages/index/index.vue:191", "加载场景异常:", err);
         common_vendor.index.showToast({
           title: "加载异常",
           icon: "none"
         });
       } finally {
         this.loadingScenes = false;
-      }
-    },
-    // 测试 Supabase 数据库连接
-    async testSupabaseConnection() {
-      this.testing = true;
-      this.testResult = null;
-      try {
-        common_vendor.index.__f__("log", "at pages/index/index.vue:194", "开始测试 Supabase 连接...");
-        const { data, error } = await utils_supabaseHelper.sceneService.getAllScenes({
-          status: "active",
-          limit: 100
-        });
-        if (error) {
-          common_vendor.index.__f__("error", "at pages/index/index.vue:203", "数据库连接失败:", error);
-          this.testResult = {
-            type: "error",
-            message: `❌ 连接失败: ${error.message || error}`
-          };
-          common_vendor.index.showToast({
-            title: "连接失败",
-            icon: "none",
-            duration: 3e3
-          });
-          return;
-        }
-        const sceneCount = data ? data.length : 0;
-        common_vendor.index.__f__("log", "at pages/index/index.vue:218", "✅ 连接成功！找到", sceneCount, "个场景");
-        this.testResult = {
-          type: "success",
-          message: `✅ 连接成功！找到 ${sceneCount} 个场景`
-        };
-        common_vendor.index.showToast({
-          title: `连接成功，找到 ${sceneCount} 个场景`,
-          icon: "success",
-          duration: 2e3
-        });
-        if (data && data.length > 0) {
-          common_vendor.index.__f__("log", "at pages/index/index.vue:233", "场景数据:", data);
-        }
-      } catch (err) {
-        common_vendor.index.__f__("error", "at pages/index/index.vue:239", "测试异常:", err);
-        this.testResult = {
-          type: "error",
-          message: `❌ 测试异常: ${err.message || "未知错误"}`
-        };
-        common_vendor.index.showToast({
-          title: "测试异常",
-          icon: "none",
-          duration: 3e3
-        });
-      } finally {
-        this.testing = false;
       }
     },
     // 排序选择下拉框变化
@@ -180,20 +152,12 @@ const _sfc_main = {
   }
 };
 function _sfc_render(_ctx, _cache, $props, $setup, $data, $options) {
-  return common_vendor.e({
-    a: common_vendor.t($data.testing ? "测试中..." : "🔍 测试数据库连接"),
-    b: common_vendor.o((...args) => $options.testSupabaseConnection && $options.testSupabaseConnection(...args)),
-    c: $data.testing,
-    d: $data.testResult
-  }, $data.testResult ? {
-    e: common_vendor.t($data.testResult.message),
-    f: common_vendor.n($data.testResult.type)
-  } : {}, {
-    g: common_vendor.t($data.sortOptions[$data.sortIndex]),
-    h: common_vendor.o((...args) => $options.onSortChange && $options.onSortChange(...args)),
-    i: $data.sortIndex,
-    j: $data.sortOptions,
-    k: common_vendor.f($data.categories, (category, index, i0) => {
+  return {
+    a: common_vendor.t($data.sortOptions[$data.sortIndex]),
+    b: common_vendor.o((...args) => $options.onSortChange && $options.onSortChange(...args)),
+    c: $data.sortIndex,
+    d: $data.sortOptions,
+    e: common_vendor.f($data.categories, (category, index, i0) => {
       return {
         a: common_vendor.t(category.name),
         b: common_vendor.t(category.count),
@@ -202,7 +166,7 @@ function _sfc_render(_ctx, _cache, $props, $setup, $data, $options) {
         e: common_vendor.o(($event) => $options.onCategoryChange(category.name), index)
       };
     }),
-    l: common_vendor.f($options.filteredScenes, (scene, index, i0) => {
+    f: common_vendor.f($options.filteredScenes, (scene, index, i0) => {
       return {
         a: common_vendor.t(scene.title),
         b: common_vendor.t(scene.times),
@@ -211,8 +175,9 @@ function _sfc_render(_ctx, _cache, $props, $setup, $data, $options) {
         e: common_vendor.o(($event) => $options.onSceneSelect(scene), index)
       };
     })
-  });
+  };
 }
 const MiniProgramPage = /* @__PURE__ */ common_vendor._export_sfc(_sfc_main, [["render", _sfc_render]]);
+_sfc_main.__runtimeHooks = 6;
 wx.createPage(MiniProgramPage);
 //# sourceMappingURL=../../../.sourcemap/mp-weixin/pages/index/index.js.map

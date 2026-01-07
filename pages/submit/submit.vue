@@ -146,6 +146,22 @@ export default {
 		this.loadUserInfo()
 		this.loadCategories()
 	},
+	// #ifdef MP-WEIXIN
+	onShareAppMessage() {
+		return {
+			title: '提交你的场景 - 哄一哄他（她）',
+			path: '/pages/submit/submit',
+			imageUrl: '' // 可选：分享图片，建议尺寸 5:4
+		}
+	},
+	onShareTimeline() {
+		return {
+			title: '提交你的场景 - 哄一哄他（她）',
+			query: '',
+			imageUrl: '' // 可选：分享图片，建议尺寸 1:1（500x500px）
+		}
+	},
+	// #endif
 	methods: {
 		loadUserInfo() {
 			this.userId = uni.getStorageSync('userId') || ''

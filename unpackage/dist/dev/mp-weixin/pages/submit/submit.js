@@ -28,6 +28,22 @@ const _sfc_main = {
     this.loadUserInfo();
     this.loadCategories();
   },
+  onShareAppMessage() {
+    return {
+      title: "提交你的场景 - 哄一哄他（她）",
+      path: "/pages/submit/submit",
+      imageUrl: ""
+      // 可选：分享图片，建议尺寸 5:4
+    };
+  },
+  onShareTimeline() {
+    return {
+      title: "提交你的场景 - 哄一哄他（她）",
+      query: "",
+      imageUrl: ""
+      // 可选：分享图片，建议尺寸 1:1（500x500px）
+    };
+  },
   methods: {
     loadUserInfo() {
       this.userId = common_vendor.index.getStorageSync("userId") || "";
@@ -56,7 +72,7 @@ const _sfc_main = {
           limit: 200
         });
         if (error) {
-          common_vendor.index.__f__("error", "at pages/submit/submit.vue:180", "加载分类失败:", error);
+          common_vendor.index.__f__("error", "at pages/submit/submit.vue:196", "加载分类失败:", error);
           this.categoryOptions = defaultCategories;
           return;
         }
@@ -71,7 +87,7 @@ const _sfc_main = {
         const dbCategories = Array.from(categorySet).filter((c) => !defaultCategories.includes(c));
         this.categoryOptions = [...defaultCategories, ...dbCategories.sort()];
       } catch (err) {
-        common_vendor.index.__f__("error", "at pages/submit/submit.vue:200", "加载分类异常:", err);
+        common_vendor.index.__f__("error", "at pages/submit/submit.vue:216", "加载分类异常:", err);
         this.categoryOptions = defaultCategories;
       }
     },
@@ -155,7 +171,7 @@ const _sfc_main = {
           expectedDifficulty: this.formData.expectedDifficulty
         });
         if (error) {
-          common_vendor.index.__f__("error", "at pages/submit/submit.vue:297", "提交失败:", error);
+          common_vendor.index.__f__("error", "at pages/submit/submit.vue:313", "提交失败:", error);
           common_vendor.index.showToast({
             title: "提交失败，请稍后重试",
             icon: "none",
@@ -184,7 +200,7 @@ const _sfc_main = {
           }
         });
       } catch (err) {
-        common_vendor.index.__f__("error", "at pages/submit/submit.vue:330", "提交异常:", err);
+        common_vendor.index.__f__("error", "at pages/submit/submit.vue:346", "提交异常:", err);
         common_vendor.index.showToast({
           title: "提交异常，请稍后重试",
           icon: "none",
@@ -236,5 +252,6 @@ function _sfc_render(_ctx, _cache, $props, $setup, $data, $options) {
   });
 }
 const MiniProgramPage = /* @__PURE__ */ common_vendor._export_sfc(_sfc_main, [["render", _sfc_render]]);
+_sfc_main.__runtimeHooks = 6;
 wx.createPage(MiniProgramPage);
 //# sourceMappingURL=../../../.sourcemap/mp-weixin/pages/submit/submit.js.map
